@@ -37,7 +37,7 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   }
 
   // Serve pressure
-  let pressure = serve.quality * 48 + serve.power * 0.22;
+  let pressure = serve.quality * 42 + serve.power * 0.18;
   if (serve.type === 'float' || serve.type === 'jumpFloat') {
     pressure += 8; // wobble
     if (st.teams[st.serving].players[serve.serverId]?.signatures.includes('PRESSURE_FLOAT')) pressure += 10;
@@ -50,7 +50,7 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   recvTeam.stats.receptions++;
 
   // Ace check first
-  if (st.rng.chance(serve.aceChance) && roll < 15) {
+  if (st.rng.chance(serve.aceChance) && roll < 8) {
     recvTeam.pstats[receiver.id].receptionErrors++;
     recvTeam.stats.receptionErrors++;
     const srv = st.teams[st.serving];
@@ -65,11 +65,11 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   let quality: ReceiveQuality;
   let qualityScore: number;
   let setterDistance: number;
-  if (roll >= 28) {
+  if (roll >= 20) {
     quality = 'perfect'; qualityScore = 0.95; setterDistance = 0.05;
     recvTeam.pstats[receiver.id].perfectReceptions++;
     recvTeam.stats.perfectReceptions++;
-  } else if (roll >= 8) {
+  } else if (roll >= 2) {
     quality = 'good'; qualityScore = 0.78; setterDistance = 0.2;
   } else if (roll >= -8) {
     quality = 'medium'; qualityScore = 0.55; setterDistance = 0.45;

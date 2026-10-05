@@ -176,7 +176,7 @@ export function executeSet(st: MatchState, teamIdx: 0 | 1, recv: ReceiveResult):
       availableOptions: options.map((o) => o.type),
     };
   }
-  if (roll >= 40) { quality = 'perfect'; qualityScore = 0.95; team.pstats[setter.id].perfectSets++; }
+  if (roll >= 28 || (passQ >= 0.75 && roll >= 18)) { quality = 'perfect'; qualityScore = 0.95; team.pstats[setter.id].perfectSets++; }
   else if (roll >= 18) { quality = 'good'; qualityScore = 0.78; }
   else if (roll >= 0) { quality = 'medium'; qualityScore = 0.55; }
   else { quality = 'poor'; qualityScore = 0.3; }

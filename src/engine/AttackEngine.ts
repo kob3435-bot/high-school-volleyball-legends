@@ -94,7 +94,7 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   scout[set.attackType] = (scout[set.attackType] ?? 0) + 1;
 
   // Error
-  let errP = 0.06 + (100 - accuracy) * 0.0015 + (1 - set.qualityScore) * 0.08;
+  let errP = 0.08 + (100 - accuracy) * 0.0018 + (1 - set.qualityScore) * 0.10;
   if (direction === 'tip') errP *= 0.6;
   if (hasSig(attacker.signatures, 'NO_MISTAKES')) errP *= 0.4;
   if (set.attackType === 'quickA') errP *= 0.85;
@@ -134,9 +134,12 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   }
 
   // Kill chance vs block
-  let killP = 0.20 + (power - 70) * 0.0035 + (accuracy - 70) * 0.0028 + set.qualityScore * 0.14;
+  let killP = 0.09 + (power - 70) * 0.002 + (accuracy - 70) * 0.0016 + set.qualityScore * 0.10;
+  if (set.qualityScore >= 0.9) killP += 0.18;
+  else if (set.qualityScore >= 0.75) killP += 0.10;
+  else if (set.qualityScore < 0.45) killP -= 0.10;
   if (block) {
-    killP -= block.blockers.length * 0.08;
+    killP -= block.blockers.length * (set.qualityScore >= 0.78 ? 0.05 : 0.09);
     killP -= block.strength * 0.0015;
     if (block.soft) killP *= 0.3;
   } else {
@@ -145,7 +148,7 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   if (direction === 'tip') killP = 0.35 + accuracy * 0.002;
   if (hasSig(attacker.signatures, 'ACE_CANNON') && (!block || block.blockers.length <= 1)) killP += 0.12;
   if (hasSig(attacker.signatures, 'SKY_ATTACK')) killP += 0.08;
-  killP = clamp(killP, 0.08, 0.65);
+  killP = clamp(killP, 0.05, 0.58);
 
   emit(st, { type: 'attack', team: offIdx, player: attacker.id, kind: set.attackType, success: true, data: { direction, power, accuracy } });
 
@@ -162,5 +165,5 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   }
 
   // Ball stays in play for dig
-  return { attackerId: attacker.id, attackType: set.attackType, direction, power, accuracy, kill: false, error: false, inPlay: true, blocked: !!block?.touch };
+  return { attackerId: attacker.id, attackType: set.attackType, direction, power, accuracy, kill: false, error: false, inPlay: true, blocked: false };
 }

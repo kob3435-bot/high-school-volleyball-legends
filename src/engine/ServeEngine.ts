@@ -109,7 +109,7 @@ export function executeServe(st: MatchState): ServeResult {
   }
 
   const quality = clamp((power + accuracy) / 200 + st.rng.gauss(0, 0.08), 0.15, 0.98);
-  let aceChance = clamp((quality - 0.58) * 0.18 + (power - 75) * 0.0012, 0.008, 0.14);
+  let aceChance = clamp((quality - 0.62) * 0.14 + (power - 75) * 0.001, 0.006, 0.10);
   if (type === 'powerJump') aceChance += 0.03;
 
   servingTeam.serveTargets[target.id] = (servingTeam.serveTargets[target.id] ?? 0) + 1;

@@ -31,6 +31,8 @@ export interface Analysis {
   mostEffectiveCombo: string;
   weakestRotation: string;
   bestRotation: string;
+  attackDistribution: Record<string, number>;
+  serveTargets: { id: string; n: number }[];
 }
 
 export function buildResult(st: MatchState, mode: string): MatchResult {
@@ -115,11 +117,22 @@ function buildAnalysis(st: MatchState): Analysis {
       for (const [k, v] of Object.entries(dist)) if (v > bestN) { bestN = v; bestCombo = k; }
     }
   }
+  const attackDistribution: Record<string, number> = {};
+  const serveTargets: { id: string; n: number }[] = [];
+  for (const team of st.teams) {
+    for (const dist of Object.values(team.attackDist)) {
+      for (const [k, v] of Object.entries(dist)) attackDistribution[k] = (attackDistribution[k] ?? 0) + v;
+    }
+    for (const [id, n] of Object.entries(team.serveTargets)) serveTargets.push({ id, n });
+  }
+  serveTargets.sort((a, b) => b.n - a.n);
   return {
     sideOutPct, breakPct, attackPct, acePct, receptionPct,
     mostEffectiveCombo: bestCombo,
     weakestRotation: 'R3',
     bestRotation: 'R1',
+    attackDistribution,
+    serveTargets: serveTargets.slice(0, 8),
   };
 }
 

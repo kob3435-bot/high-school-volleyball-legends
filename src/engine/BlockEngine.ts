@@ -137,6 +137,9 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
   strength /= blockers.length;
   // more blockers help
   strength += (blockers.length - 1) * 6;
+  // Perfect pass/set first-ball: block late
+  if (set.qualityScore >= 0.78) strength -= 12;
+  else if (set.qualityScore >= 0.6) strength -= 5;
 
   // Tempo: quicks are harder to block well
   if (set.attackType === 'quickA') strength -= 18;
@@ -151,7 +154,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     touch: false, stuff: false, tool: false, soft: false, out: false, funnel: false, strength,
   };
 
-  if (diff > 18 && st.rng.chance(clamp(0.15 + diff * 0.008, 0.1, 0.45))) {
+  if (diff > 22 && st.rng.chance(clamp(0.10 + diff * 0.006, 0.06, 0.32))) {
     // stuff block
     result.touch = true; result.stuff = true;
     const hero = blockers[0];
@@ -164,7 +167,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     return result;
   }
 
-  if (diff > 0 && st.rng.chance(0.45)) {
+  if (diff > -8 && st.rng.chance(0.55)) {
     result.touch = true;
     // soft block or funnel
     if (blockers.some((b) => hasSig(b.signatures, 'FUNNEL_BLOCK'))) {

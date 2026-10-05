@@ -13,9 +13,16 @@ export interface Settings {
   language: 'en' | 'th';
 }
 
+function detectDefaultLang(): 'en' | 'th' {
+  try {
+    if (typeof navigator !== 'undefined' && (navigator.language || '').toLowerCase().startsWith('th')) return 'th';
+  } catch { /* */ }
+  return 'en';
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   volume: 0.6, muted: false, gameSpeed: 1, replay: 'important',
-  graphics: 'auto', bestOf: 5, language: 'en',
+  graphics: 'auto', bestOf: 5, language: detectDefaultLang(),
 };
 
 export interface SavedTeam {

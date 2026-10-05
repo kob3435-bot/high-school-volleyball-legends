@@ -1,0 +1,155 @@
+:root {
+  --bg: #0b1a2b;
+  --bg2: #12263f;
+  --panel: #16324f;
+  --panel2: #1c3d5a;
+  --line: #2a5578;
+  --text: #e8f1ff;
+  --muted: #8fb0d0;
+  --accent: #ff4d6d;
+  --accent2: #ffd166;
+  --good: #2dd4a8;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --radius: 12px;
+  --font: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+button, input, select { font: inherit; }
+a { color: var(--accent2); }
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.screen { padding: 16px 18px 28px; max-width: 1100px; margin: 0 auto; width: 100%; }
+.screen.wide { max-width: 1280px; }
+.screen.full { max-width: none; padding: 0; }
+
+h1.title {
+  font-size: clamp(1.6rem, 4vw, 2.4rem); margin: 0 0 4px;
+  background: linear-gradient(90deg, #fff, var(--accent2), var(--accent));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  letter-spacing: 0.04em; font-weight: 800;
+}
+.subtitle { color: var(--muted); margin: 0 0 18px; }
+
+.panel {
+  background: linear-gradient(180deg, var(--panel), var(--panel2));
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.panel + .panel { margin-top: 12px; }
+
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--bg2);
+  color: var(--text); padding: 10px 16px; border-radius: 10px; cursor: pointer;
+  font-weight: 650; transition: .15s transform, .15s background, .15s border-color;
+}
+.btn:hover { transform: translateY(-1px); border-color: var(--accent2); }
+.btn:active { transform: translateY(0); }
+.btn.primary { background: linear-gradient(135deg, var(--accent), #c9184a); border-color: transparent; }
+.btn.good { background: linear-gradient(135deg, #0f9f78, #2dd4a8); border-color: transparent; color: #042; }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn.big { padding: 14px 22px; font-size: 1.05rem; }
+.btn.sm { padding: 6px 10px; font-size: .85rem; }
+
+.row { display: flex; align-items: center; }
+.row.gap { gap: 10px; }
+.row.wrap { flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.grid { display: grid; gap: 12px; }
+.grid.modes { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.grid.players { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+
+.mode-card {
+  text-align: left; padding: 16px; border-radius: 14px;
+  background: linear-gradient(145deg, #1a3350, #0f2438);
+  border: 1px solid var(--line); cursor: pointer; color: inherit;
+}
+.mode-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mode-card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.mode-card p { margin: 0; color: var(--muted); font-size: .88rem; }
+
+.player-card {
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px;
+  background: #0f2238; cursor: pointer; position: relative;
+}
+.player-card.selected { outline: 2px solid var(--accent2); }
+.player-card .ovr { position: absolute; top: 8px; right: 8px; font-weight: 800; color: var(--accent2); }
+.player-card .name { font-weight: 700; font-size: .95rem; }
+.player-card .meta { color: var(--muted); font-size: .78rem; }
+.pos-tag {
+  display: inline-block; padding: 2px 6px; border-radius: 6px;
+  background: #244866; font-size: .72rem; font-weight: 700; margin-right: 4px;
+}
+.pos-tag.S { background: #5b2c6f; }
+.pos-tag.MB { background: #1a5276; }
+.pos-tag.OH { background: #196f3d; }
+.pos-tag.OP { background: #9a7d0a; }
+.pos-tag.L { background: #922b21; }
+
+.muted { color: var(--muted); }
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: #111c; color: #fff; padding: 10px 16px; border-radius: 999px;
+  border: 1px solid var(--line); z-index: 50; backdrop-filter: blur(6px);
+}
+
+/* Live match */
+.live-wrap { display: flex; flex-direction: column; height: 100vh; background: #07111c; }
+.live-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; background: #0b1a2bcc; border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.scoreboard {
+  display: flex; align-items: center; gap: 12px; font-weight: 800;
+}
+.scoreboard .team { min-width: 70px; }
+.scoreboard .team.right { text-align: right; }
+.scoreboard .sets { display: flex; gap: 4px; }
+.scoreboard .set-pip {
+  width: 14px; height: 14px; border-radius: 3px; background: #244;
+  border: 1px solid #466;
+}
+.scoreboard .set-pip.on { background: var(--accent2); }
+.scoreboard .pts {
+  font-size: 1.6rem; min-width: 70px; text-align: center;
+  background: #0008; padding: 2px 10px; border-radius: 8px;
+}
+.court-stage { flex: 1; position: relative; min-height: 0; background: #0a1522; }
+.court-stage canvas { width: 100%; height: 100%; display: block; }
+.live-bottom {
+  padding: 8px 12px 12px; background: #0b1a2b; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.commentary {
+  min-height: 1.4em; color: var(--accent2); font-weight: 650; font-size: .95rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tactical-panel {
+  display: none; grid-template-columns: 1fr 1fr; gap: 8px;
+  background: #12263fcc; border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+}
+.tactical-panel.open { display: grid; }
+.overlay-chip {
+  position: absolute; z-index: 5; background: #0b1a2b99; border: 1px solid #fff3;
+  border-radius: 8px; padding: 4px 8px; font-size: .75rem; backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+table.box { width: 100%; border-collapse: collapse; font-size: .85rem; }
+table.box th, table.box td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+table.box th:first-child, table.box td:first-child { text-align: left; }
+table.box th { color: var(--muted); font-weight: 600; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+.tab.on { background: var(--accent); border-color: transparent; }
+
+@media (max-width: 700px) {
+  .screen { padding: 12px; }
+  .scoreboard .pts { font-size: 1.3rem; }
+  .btn { padding: 12px 14px; } /* touch friendly */
+  .tactical-panel { grid-template-columns: 1fr; }
+}

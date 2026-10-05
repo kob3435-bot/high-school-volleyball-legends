@@ -1,0 +1,31 @@
+import { useContext } from 'preact/hooks';
+import { Ctx } from '../store';
+import { Shell } from '../components';
+import { buildSchoolTeam } from '../../engine/teamBuilder';
+
+const CHALLENGES = [
+  { id: 'comeback', title: 'Comeback Kids', desc: 'Beat Shiratori with Karasawa', a: 'karasawa', b: 'shiratori' },
+  { id: 'iron', title: 'Break the Wall', desc: 'Score 25 on Date Industrial', a: 'aoba', b: 'date' },
+  { id: 'cats', title: 'Cat Fight', desc: 'Out-rally Nekoma East', a: 'fukuro', b: 'nekoma' },
+  { id: 'twins', title: 'Twin Storm', desc: 'Win with Inari High', a: 'inari', b: 'kamome' },
+];
+
+export function Challenge() {
+  const ctx = useContext(Ctx);
+  return (
+    <Shell title="Tactical Challenge" onBack={ctx.back}>
+      <div class="grid modes">
+        {CHALLENGES.map((c) => (
+          <button key={c.id} class="mode-card" data-testid={`challenge-${c.id}`} onClick={() => {
+            const t = buildSchoolTeam(c.a); t.isCPU = false;
+            const o = buildSchoolTeam(c.b); o.isCPU = true;
+            ctx.nav({ name: 'preview', team: t, opponent: o, mode: 'challenge', seed: Date.now() >>> 0 });
+          }}>
+            <h3>{c.title}</h3>
+            <p>{c.desc}</p>
+          </button>
+        ))}
+      </div>
+    </Shell>
+  );
+}

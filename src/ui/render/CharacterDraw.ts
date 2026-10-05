@@ -28,6 +28,8 @@ export interface CharDraw {
   starSig?: string | null;
   showLabel?: boolean;
   crestColor?: string;
+  /** Extra jump height multiplier from contact cue (0-1+) */
+  jumpBoost?: number;
 }
 
 function skin(tone: number): string {
@@ -146,6 +148,7 @@ export function drawCharacter(
   if (bodyH < 8) return;
   const sk = skin(c.skinTone);
   const pose = poseFor(c.anim, c.animT, c.handedness);
+  if (c.jumpBoost && c.jumpBoost > 0) pose.jump *= (0.75 + c.jumpBoost);
   const face = c.facing || 1;
   const build = 0.75 + c.build * 0.45;
   const jersey = c.isLibero ? contrastLibero(c.jersey, c.accent) : c.jersey;

@@ -3,24 +3,40 @@ import type { SimEvent } from '../../engine/types';
 import type { Appearance } from '../../engine/types';
 import { getPlayer } from '../../engine/db';
 import { drawCharacter, exprFromState, type Anim, type CharDraw } from './CharacterDraw';
+import {
+  makeFlight, stepFlight, contactHeight, timeToApex, jumpHeightFromAttr, handOffset,
+  type Flight, type Spin, type Vec3,
+} from './BallPhysics';
 
 interface Char {
   id: string; team: 0 | 1; num: number; name: string; heightCm: number;
   appearance: Appearance; handedness: 'R' | 'L'; isLibero: boolean;
   signatures: string[];
+  jumpAttr: number;
   x: number; y: number; // court: x 0-18 length, y 0-9 width (0 = near sideline / camera)
   tx: number; ty: number;
   anim: Anim; animT: number; prevAnim: Anim; blend: number;
   jumpH: number; expression: number; facing: number;
   starSig: string | null;
+  /** World-time contact cue for synced jump/swing */
+  cue: {
+    contactAt: number;
+    takeoffAt: number;
+    landAt: number;
+    peakAnimT: number;
+    contactZ: number;
+    kind: Anim;
+    recorded?: boolean;
+  } | null;
 }
 
 interface Ball {
   x: number; y: number; z: number;
-  sx: number; sy: number; sz: number;
-  tx: number; ty: number; tz: number;
-  t: number; dur: number; wobble: number;
+  flight: Flight | null;
+  spin: Spin;
   trail: { x: number; y: number; z: number }[];
+  /** Floor bounce remnant */
+  bounceT: number;
 }
 
 type CamMode = 'courtside' | 'broadcast' | 'behindServe' | 'net' | 'closeup' | 'replay';
@@ -43,7 +59,14 @@ const COURT_L = 18, COURT_W = 9;
 
 export class CourtView {
   chars = new Map<string, Char>();
-  ball: Ball = { x: 9, y: 4.5, z: 1.2, sx: 9, sy: 4.5, sz: 1.2, tx: 9, ty: 4.5, tz: 1.2, t: 1, dur: 1, wobble: 0, trail: [] };
+  ball: Ball = { x: 9, y: 4.5, z: 1.2, flight: null, spin: 'none', trail: [], bounceT: 0 };
+  /** Debug: last contact samples for Playwright sync checks */
+  debugContacts: { t: number; kind: string; playerId: string; ball: Vec3; hand: Vec3; dist: number }[] = [];
+  /** Kinds that freeze the view on contact (set by e2e). */
+  autoFreezeKinds: string[] = [];
+  holdFrozen = false;
+  frozenContact: { kind: string; playerId: string; t: number } | null = null;
+  private pendingOutbound: { from: Vec3; to: Vec3; spin: Spin; delay: number } | null = null;
   colors: [[string, string], [string, string]];
   score: [number, number] = [0, 0];
   sets: [number, number] = [0, 0];
@@ -95,10 +118,11 @@ export class CourtView {
             handedness: def?.handedness ?? 'R',
             isLibero: def?.pos === 'L',
             signatures: def?.signatures ?? [],
+            jumpAttr: def?.attrs?.jump ?? 70,
             x: 0, y: 0, tx: 0, ty: 0,
             anim: 'ready', animT: 0, prevAnim: 'ready', blend: 1,
             jumpH: 0, expression: 0, facing: team === 0 ? 1 : -1,
-            starSig: null,
+            starSig: null, cue: null,
           };
           this.chars.set(id, c);
         }
@@ -202,86 +226,258 @@ export class CourtView {
     this.animateFromEvent(e);
   }
 
+
   private setAnim(c: Char, a: Anim) {
     c.prevAnim = c.anim; c.anim = a; c.animT = 0; c.blend = 0;
+  }
+
+  /** Schedule player so jump apex / arm peak meets ball at contactAt (world time). */
+  private cueContact(c: Char, kind: Anim, contactAt: number, contactZ: number) {
+    const jH = jumpHeightFromAttr(c.jumpAttr, kind);
+    const apexT = timeToApex(Math.max(0.12, jH));
+    const needsJump = ['spike','quickSpike','backAttack','block','eyeTrack','jumpServe','jumpFloat','jumpSet'].includes(kind);
+    const takeoffAt = needsJump ? contactAt - apexT : contactAt - 0.12;
+    const landAt = contactAt + (needsJump ? apexT * 0.85 : 0.2);
+    // Peak swing ~0.45 into spike/block anim curve
+    const peakAnimT = kind.includes('spike') || kind === 'backAttack' || kind === 'block' || kind === 'eyeTrack' ? 0.42
+      : kind === 'jumpSet' || kind === 'set' ? 0.35
+      : kind.includes('erve') ? 0.5
+      : 0.3;
+    c.cue = { contactAt, takeoffAt, landAt, peakAnimT, contactZ, kind };
+    c.jumpH = jH;
+    this.setAnim(c, kind);
+    // Pre-seek animT so at contactAt we hit peakAnimT
+    const lead = Math.max(0, contactAt - this.time);
+    c.animT = Math.max(0, peakAnimT - lead);
+  }
+
+  private handWorld(c: Char, kind: Anim, contactZ: number): Vec3 {
+    const off = handOffset(kind, c.facing, c.team);
+    return { x: c.x + off.dx, y: c.y + off.dy, z: contactZ };
+  }
+
+  private recordContact(kind: string, c: Char, hand: Vec3) {
+    // After snap, ball === hand; measure residual only
+    const dist = Math.hypot(this.ball.x - hand.x, this.ball.y - hand.y, this.ball.z - hand.z);
+    this.debugContacts.push({
+      t: this.time, kind, playerId: c.id,
+      ball: { x: this.ball.x, y: this.ball.y, z: this.ball.z },
+      hand: { ...hand }, dist,
+    });
+    if (this.debugContacts.length > 80) this.debugContacts.shift();
+    if (this.autoFreezeKinds.length && this.autoFreezeKinds.some((k) => kind === k || kind.includes(k))) {
+      this.holdFrozen = true;
+      this.frozenContact = { kind, playerId: c.id, t: this.time };
+      // Hold contact pose: keep cue alive briefly
+      if (c.cue) c.cue.landAt = Math.max(c.cue.landAt, this.time + 0.6);
+    }
+  }
+
+  unfreeze() {
+    this.holdFrozen = false;
+    this.frozenContact = null;
+  }
+
+  /** Launch physics flight; returns duration. */
+  private launchBall(to: Vec3, spin: Spin, dur?: number): number {
+    const from = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
+    const f = makeFlight(from, to, spin, dur);
+    this.ball.flight = f;
+    this.ball.spin = spin;
+    this.ball.trail = [{ ...from }];
+    return f.dur;
   }
 
   private animateFromEvent(e: SimEvent) {
     const actor = e.player ? this.chars.get(e.player) : null;
     const target = e.player2 ? this.chars.get(e.player2) : null;
+    const now = this.time;
 
     switch (e.type) {
       case 'serve': {
         if (!actor) break;
         const jump = e.kind === 'jump' || e.kind === 'powerJump' || e.kind === 'jumpFloat';
-        this.setAnim(actor, jump ? (e.kind === 'jumpFloat' ? 'jumpFloat' : 'jumpServe') : 'serve');
+        const kind: Anim = jump ? (e.kind === 'jumpFloat' ? 'jumpFloat' : 'jumpServe') : 'serve';
+        const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
+        const toRecv = target ?? [...this.chars.values()].find((c) => c.team !== actor.team);
+        // Toss/plant then contact
+        const contactIn = jump ? 0.55 : 0.35;
+        actor.tx = actor.x; actor.ty = actor.y;
+        this.cueContact(actor, kind, now + contactIn, z);
+        // Ball starts at toss height then to receiver platform
+        this.ball.x = actor.x; this.ball.y = actor.y; this.ball.z = jump ? 2.6 : 2.1;
+        if (toRecv) {
+          const hz = contactHeight('receive', toRecv.heightCm, toRecv.jumpAttr);
+          const hand = this.handWorld(toRecv, 'receive', hz);
+          toRecv.tx = hand.x - handOffset('receive', toRecv.facing, toRecv.team).dx;
+          toRecv.ty = hand.y;
+          const spin: Spin = (e.kind === 'float' || e.kind === 'jumpFloat') ? 'float' : 'serve';
+          // Ball flies toward receiver platform; receive event will cue the pass contact
+          this.pendingOutbound = { from: this.handWorld(actor, kind, z), to: hand, spin, delay: contactIn + 0.03 };
+        }
         this.setCam('behindServe', actor.x, Math.min(4, actor.y), 1.2, 1.4);
-        const to = target ?? [...this.chars.values()].find((c) => c.team !== actor.team);
-        if (to) this.flyBall(actor.x, actor.y, 2.4, to.x, to.y, 1.1, 0.95, e.kind === 'float' || e.kind === 'jumpFloat' ? 1 : 0);
         break;
       }
       case 'receive': case 'dig': {
         if (!actor) break;
-        this.setAnim(actor, e.type === 'dig' ? (Math.random() > 0.5 ? 'dive' : 'dig') : 'receive');
-        const midX = actor.team === 0 ? 7.2 : 10.8;
-        this.flyBall(actor.x, actor.y, 0.9, midX, 3.5 + Math.random(), 2.6, 0.6, 0);
+        const dive = e.type === 'dig' && Math.random() > 0.55;
+        const kind: Anim = dive ? 'dive' : (e.type === 'dig' ? 'dig' : 'receive');
+        const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
+        const hand = this.handWorld(actor, kind, z);
+        // Intercept: move under current ball projection
+        actor.tx = this.ball.x - handOffset(kind, actor.facing, actor.team).dx;
+        actor.ty = this.ball.y;
+        const arrive = 0.28;
+        // Retarget ball to hand
+        this.launchBall(hand, 'none', arrive);
+        this.cueContact(actor, kind, now + arrive, z);
+        // Outbound toward setter area after contact
+        const midX = actor.team === 0 ? 7.0 : 11.0;
+        this.pendingOutbound = {
+          from: hand,
+          to: { x: midX, y: 3.2 + Math.random() * 2.5, z: 2.55 },
+          spin: 'none',
+          delay: arrive + 0.03,
+        };
         break;
       }
       case 'set': {
         if (!actor) break;
-        this.setAnim(actor, 'jumpSet');
+        const kind: Anim = 'jumpSet';
+        const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
+        const hand = this.handWorld(actor, kind, z);
+        actor.tx = this.ball.x; actor.ty = this.ball.y;
+        const arrive = 0.32;
+        this.launchBall(hand, 'none', arrive);
+        this.cueContact(actor, kind, now + arrive, z);
         if (target) {
-          this.setAnim(target, e.kind?.startsWith('quick') ? 'approach' : 'approach');
-          const hx = target.team === 0 ? Math.min(target.x + 0.8, 8.5) : Math.max(target.x - 0.8, 9.5);
-          this.flyBall(actor.x, actor.y, 2.5, hx, target.y, 3.1, 0.42, 0);
-          this.setCam(e.kind?.startsWith('quick') ? 'net' : 'courtside', hx, Math.min(5, target.y), 1.2, 1.0);
+          const atkKind: Anim = e.kind?.startsWith('quick') ? 'quickSpike' : 'spike';
+          const az = contactHeight(atkKind, target.heightCm, target.jumpAttr);
+          const aHand = this.handWorld(target, atkKind, az);
+          // Approach near net
+          const netSide = target.team === 0 ? Math.min(target.x + 0.6, 8.4) : Math.max(target.x - 0.6, 9.6);
+          target.tx = netSide; target.ty = aHand.y;
+          this.setAnim(target, 'approach');
+          const setDur = 0.38;
+          this.pendingOutbound = {
+            from: hand,
+            to: aHand,
+            spin: 'none',
+            delay: arrive,
+          };
+          // Override pending with setDur after contact — handled below via second schedule
+          const hitAt = now + arrive + setDur;
+          this.cueContact(target, atkKind, hitAt, az);
+          // Move opposing front-row toward net for impending block (timed on block event)
+          for (const b of this.chars.values()) {
+            if (b.team === target.team) continue;
+            if (b.y < 5.5 && Math.abs((b.tx || b.x) - 9) < 5) {
+              b.tx = 9 + (b.team === 0 ? -0.45 : 0.45);
+              b.ty = target.ty;
+            }
+          }
+          this.setCam(e.kind?.startsWith('quick') ? 'net' : 'courtside', netSide, Math.min(5, target.y), 1.2, 1.0);
         }
         break;
       }
       case 'attack': case 'kill': {
         if (!actor) break;
-        const a: Anim = e.kind?.startsWith('quick') ? 'quickSpike'
+        const kind: Anim = e.kind?.startsWith('quick') ? 'quickSpike'
           : e.kind === 'tip' ? 'tip'
           : e.kind === 'backAttack' || e.kind === 'pipe' ? 'backAttack' : 'spike';
-        this.setAnim(actor, a);
+        const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
+        const hand = this.handWorld(actor, kind, z);
+        actor.tx = hand.x - handOffset(kind, actor.facing, actor.team).dx;
+        actor.ty = hand.y;
+        const arrive = 0.22;
+        this.launchBall(hand, 'none', arrive);
+        this.cueContact(actor, kind, now + arrive, z);
         const landX = actor.team === 0 ? 11 + Math.random() * 5 : 2 + Math.random() * 5;
         const landY = 1.2 + Math.random() * 6.5;
-        this.flyBall(actor.x, actor.y, 3.3, landX, landY, 0.35, 0.5, 0);
+        const spin: Spin = kind === 'tip' ? 'none' : 'spike';
+        this.pendingOutbound = {
+          from: hand,
+          to: { x: landX, y: landY, z: 0.15 },
+          spin,
+          delay: arrive,
+        };
         this.shake = 0.3;
         this.setCam('net', 9, Math.min(5, actor.y), 1.22, 0.9);
         break;
       }
-      case 'block': case 'blockPoint': {
+      case 'block': case 'blockPoint': case 'softBlock': {
         if (!actor) break;
-        this.setAnim(actor, 'block');
-        this.setCam('net', 9, Math.min(5, actor.y), 1.22, 1.1);
+        const z = contactHeight('block', actor.heightCm, actor.jumpAttr);
+        const hand = this.handWorld(actor, 'block', z);
+        actor.tx = 9 + (actor.team === 0 ? -0.35 : 0.35);
+        actor.ty = this.ball.y;
+        const arrive = 0.18;
+        // Ball deflects off hands
+        this.launchBall(hand, 'spike', arrive);
+        this.cueContact(actor, 'block', now + arrive, z);
         if (e.type === 'blockPoint') {
-          const bx = actor.team === 0 ? actor.x - 3.5 : actor.x + 3.5;
-          this.flyBall(this.ball.x, this.ball.y, 3.0, bx, actor.y, 0.4, 0.35, 0);
+          const bx = actor.team === 0 ? actor.x - 3.2 : actor.x + 3.2;
+          this.pendingOutbound = {
+            from: hand,
+            to: { x: bx, y: actor.y, z: 0.2 },
+            spin: 'spike',
+            delay: arrive,
+          };
+        } else if (e.type === 'softBlock') {
+          const defX = actor.team === 0 ? actor.x - 2 : actor.x + 2;
+          this.pendingOutbound = {
+            from: hand,
+            to: { x: defX, y: 4 + Math.random() * 2, z: 1.2 },
+            spin: 'none',
+            delay: arrive,
+          };
         }
+        this.setCam('net', 9, Math.min(5, actor.y), 1.22, 1.1);
+        break;
+      }
+      case 'blockOut': {
+        // Tool: ball continues past block to floor out
+        const landX = this.ball.x + (Math.random() > 0.5 ? 2 : -2);
+        this.pendingOutbound = {
+          from: { x: this.ball.x, y: this.ball.y, z: this.ball.z },
+          to: { x: landX, y: this.ball.y, z: 0.12 },
+          spin: 'spike',
+          delay: 0.05,
+        };
         break;
       }
       case 'setterDump': {
         if (!actor) break;
-        this.setAnim(actor, 'dump');
+        const z = contactHeight('dump', actor.heightCm, actor.jumpAttr);
+        const hand = this.handWorld(actor, 'dump', z);
+        const arrive = 0.2;
+        this.launchBall(hand, 'none', arrive);
+        this.cueContact(actor, 'dump', now + arrive, z);
+        this.pendingOutbound = {
+          from: hand,
+          to: { x: actor.team === 0 ? 11.5 : 6.5, y: actor.y, z: 0.2 },
+          spin: 'none',
+          delay: arrive,
+        };
         this.setCam('net', 9, Math.min(5, actor.y), 1.2, 1.0);
-        this.flyBall(actor.x, actor.y, 2.3, actor.team === 0 ? 11 : 7, actor.y, 0.5, 0.4, 0);
         break;
       }
       case 'ace':
         this.flash = { text: 'ACE!', t: 1.6, color: '#ffd166' };
-        this.shake = 0.55; this.crowd = 1; this.benchEnergy = 1; this.refSignal = Math.random() > 0.5 ? 'pointL' : 'pointR'; this.refSignalT = 1.2;
+        this.shake = 0.55; this.crowd = 1; this.benchEnergy = 1;
+        this.refSignal = Math.random() > 0.5 ? 'pointL' : 'pointR'; this.refSignalT = 1.2;
+        // Ball to floor deep
+        this.pendingOutbound = {
+          from: { x: this.ball.x, y: this.ball.y, z: this.ball.z },
+          to: { x: this.ball.x, y: this.ball.y, z: 0.1 },
+          spin: 'serve',
+          delay: 0.05,
+        };
+        break;
+      case 'attackError': case 'ballOut':
+        this.ball.bounceT = 0.6;
         break;
     }
-  }
-
-  private flyBall(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, dur: number, wobble: number) {
-    this.ball.sx = x0; this.ball.sy = y0; this.ball.sz = z0;
-    this.ball.x = x0; this.ball.y = y0; this.ball.z = z0;
-    this.ball.tx = x1; this.ball.ty = y1; this.ball.tz = z1;
-    this.ball.t = 0; this.ball.dur = Math.max(0.18, dur);
-    this.ball.wobble = wobble;
-    this.ball.trail = [{ x: x0, y: y0, z: z0 }];
   }
 
   private setCam(mode: CamMode, fx: number, fy: number, zoom: number, dur: number) {
@@ -291,6 +487,11 @@ export class CourtView {
   }
 
   update(dt: number) {
+    if (this.holdFrozen) {
+      // Keep drawing contact pose; do not advance physics/anims
+      return;
+    }
+
     // Replay playback
     let d = dt;
     if (this.replay) {
@@ -336,47 +537,93 @@ export class CourtView {
       this.cam.tzoom = 1.02;
     }
 
-    // Ball
-    if (this.ball.t < this.ball.dur) {
-      this.ball.t += d;
-      const u = Math.min(1, this.ball.t / this.ball.dur);
-      const arc = Math.sin(u * Math.PI) * (1.0 + Math.abs(this.ball.tz - this.ball.sz) * 0.25);
-      let x = this.ball.sx + (this.ball.tx - this.ball.sx) * u;
-      let y = this.ball.sy + (this.ball.ty - this.ball.sy) * u;
-      let z = this.ball.sz + (this.ball.tz - this.ball.sz) * u + arc;
-      if (this.ball.wobble) {
-        x += Math.sin(u * 20) * 0.12 * this.ball.wobble;
-        y += Math.cos(u * 16) * 0.08 * this.ball.wobble;
-      }
-      this.ball.x = x; this.ball.y = y; this.ball.z = z;
-      if (this.graphics !== 'low') {
-        this.ball.trail.push({ x, y, z });
-        if (this.ball.trail.length > 14) this.ball.trail.shift();
+    // Pending outbound after contact delay
+    if (this.pendingOutbound) {
+      this.pendingOutbound.delay -= d;
+      if (this.pendingOutbound.delay <= 0) {
+        const o = this.pendingOutbound;
+        this.pendingOutbound = null;
+        this.ball.x = o.from.x; this.ball.y = o.from.y; this.ball.z = o.from.z;
+        this.launchBall(o.to, o.spin);
       }
     }
+
+    // Ball physics flight
+    if (this.ball.flight) {
+      const { pos, done } = stepFlight(this.ball.flight, d);
+      this.ball.x = pos.x; this.ball.y = pos.y; this.ball.z = pos.z;
+      if (this.graphics !== 'low') {
+        this.ball.trail.push({ ...pos });
+        if (this.ball.trail.length > 16) this.ball.trail.shift();
+      }
+      if (done) {
+        // Floor bounce if near ground
+        if (this.ball.z < 0.35) {
+          this.ball.bounceT = 0.55;
+          this.ball.z = 0.12;
+        }
+        this.ball.flight = null;
+      }
+    }
+    if (this.ball.bounceT > 0) this.ball.bounceT -= d;
 
     for (const c of this.chars.values()) {
       const dx = c.tx - c.x, dy = c.ty - c.y;
       const dist = Math.hypot(dx, dy);
       if (dist > 0.04) {
-        const spd = (c.anim === 'approach' || c.anim === 'run' ? 5.5 : 3.2) * d;
+        const spd = (c.anim === 'approach' || c.anim === 'run' || (c.cue && this.time < c.cue.contactAt) ? 6.2 : 3.4) * d;
         const m = Math.min(dist, spd);
         c.x += (dx / dist) * m;
         c.y += (dy / dist) * m;
-        if (c.anim === 'ready' || c.anim === 'idle') this.setAnim(c, 'run');
+        if ((c.anim === 'ready' || c.anim === 'idle') && !c.cue) this.setAnim(c, 'run');
         c.facing = dx > 0.05 ? 1 : dx < -0.05 ? -1 : c.facing;
-      } else if (c.anim === 'run' || c.anim === 'sideStep') {
+      } else if ((c.anim === 'run' || c.anim === 'sideStep') && !c.cue) {
         this.setAnim(c, 'ready');
       }
-      c.animT += d;
+
+      // Contact cue: drive animT so peak lands on contactAt; sync jumpH
+      if (c.cue) {
+        const cue = c.cue;
+        const until = cue.contactAt - this.time;
+        if (until > 0) {
+          // Ease animT toward peak at contact
+          c.animT = cue.peakAnimT - until;
+          if (c.animT < 0) c.animT = 0;
+          c.anim = cue.kind;
+        } else if (this.time < cue.landAt) {
+          // Past contact — follow through then land
+          c.animT = cue.peakAnimT + (this.time - cue.contactAt);
+          if (!cue.recorded && this.time >= cue.contactAt - 0.02) {
+            // Snap feet under ball, then hand = ball (Simulation sync frame)
+            const off = handOffset(cue.kind, c.facing, c.team);
+            c.x = this.ball.x - off.dx;
+            c.y = this.ball.y - off.dy;
+            c.tx = c.x; c.ty = c.y;
+            const hand = this.handWorld(c, cue.kind, cue.contactZ);
+            this.ball.x = hand.x; this.ball.y = hand.y; this.ball.z = hand.z;
+            if (this.ball.flight) this.ball.flight.t = this.ball.flight.dur; // end inbound
+            this.recordContact(cue.kind, c, hand);
+            cue.recorded = true;
+          }
+          if (this.time > cue.contactAt + 0.18 && ['spike','quickSpike','block','jumpServe','jumpFloat','backAttack','eyeTrack','jumpSet'].includes(c.anim)) {
+            if (c.anim !== 'landing') this.setAnim(c, 'landing');
+          }
+        } else {
+          c.cue = null;
+          if (c.anim === 'landing' || !['ready','idle','timeout'].includes(c.anim)) this.setAnim(c, 'ready');
+        }
+      } else {
+        c.animT += d;
+        if (c.animT > 1.15 && !['ready', 'idle', 'timeout', 'run'].includes(c.anim)) {
+          if (['spike', 'quickSpike', 'block', 'jumpServe', 'jumpFloat', 'backAttack', 'eyeTrack'].includes(c.anim)) this.setAnim(c, 'landing');
+          else this.setAnim(c, 'ready');
+        }
+        if (c.anim === 'landing' && c.animT > 0.3) this.setAnim(c, 'ready');
+      }
+
       c.blend = Math.min(1, c.blend + d * 4);
       if (c.expression !== 0) c.expression *= 0.985;
       if (c.starSig && c.animT > 1.2) c.starSig = null;
-      if (c.animT > 1.15 && !['ready', 'idle', 'timeout', 'run'].includes(c.anim)) {
-        if (['spike', 'quickSpike', 'block', 'jumpServe', 'jumpFloat', 'backAttack', 'eyeTrack'].includes(c.anim)) this.setAnim(c, 'landing');
-        else this.setAnim(c, 'ready');
-      }
-      if (c.anim === 'landing' && c.animT > 0.3) this.setAnim(c, 'ready');
     }
   }
 
@@ -809,9 +1056,21 @@ export class CourtView {
   }
 
   private drawChar(ctx: CanvasRenderingContext2D, c: Char, cam: ReturnType<CourtView['makeCam']>, viewH: number) {
-    const jump = (c.anim === 'spike' || c.anim === 'block' || c.anim === 'jumpServe' || c.anim === 'quickSpike'
-      || c.anim === 'jumpSet' || c.anim === 'backAttack' || c.anim === 'jumpFloat' || c.anim === 'eyeTrack')
-      ? Math.sin(Math.min(1, c.animT * 1.2) * Math.PI) * 1.2 : 0;
+    let jump = 0;
+    if (c.cue && this.time >= c.cue.takeoffAt && this.time <= c.cue.landAt) {
+      // Physical jump curve peaking at contactAt
+      const apexT = Math.max(0.08, c.cue.contactAt - c.cue.takeoffAt);
+      const landT = Math.max(0.08, c.cue.landAt - c.cue.contactAt);
+      if (this.time <= c.cue.contactAt) {
+        const u = (this.time - c.cue.takeoffAt) / apexT;
+        jump = Math.sin(Math.min(1, Math.max(0, u)) * Math.PI / 2) * c.jumpH * 1.15;
+      } else {
+        const u = (this.time - c.cue.contactAt) / landT;
+        jump = Math.cos(Math.min(1, Math.max(0, u)) * Math.PI / 2) * c.jumpH * 1.15;
+      }
+    } else if (['spike','block','jumpServe','quickSpike','jumpSet','backAttack','jumpFloat','eyeTrack'].includes(c.anim)) {
+      jump = Math.sin(Math.min(1, c.animT * 1.2) * Math.PI) * 1.0;
+    }
     const [sx, sy, sc] = cam.project(c.x, c.y, jump);
     // Target: near-side characters ~25-45% of visible court / view height
     const heightFactor = 1.0 + (c.heightCm - 170) * 0.012;
@@ -833,6 +1092,7 @@ export class CourtView {
       facing: c.facing, starSig: null,
       showLabel: this.shouldShowLabel(c),
       crestColor: this.colors[c.team][1],
+      jumpBoost: c.cue ? Math.min(1.4, c.jumpH / 0.55) : (['spike','quickSpike','block','jumpServe','jumpFloat','backAttack','eyeTrack','jumpSet'].includes(c.anim) ? 1 : 0),
     };
     drawCharacter(ctx, draw, sx, sy, bodyH, bob);
   }
@@ -842,17 +1102,22 @@ export class CourtView {
       for (let i = 0; i < this.ball.trail.length; i++) {
         const p = this.ball.trail[i];
         const [x, y, sc] = cam.project(p.x, p.y, p.z);
-        ctx.globalAlpha = (i / this.ball.trail.length) * 0.35;
+        ctx.globalAlpha = (i / this.ball.trail.length) * 0.4;
         ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(x, y, Math.max(2, sc * 0.06), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, Math.max(2, sc * 0.055), 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
     }
     const [bx, by, sc] = cam.project(this.ball.x, this.ball.y, this.ball.z);
     const r = Math.max(5, sc * 0.12);
-    const [, sy] = cam.project(this.ball.x, this.ball.y, 0);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath(); ctx.ellipse(bx, sy + 3, r * 0.85, r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+    // Ground shadow at true floor (x,y,0) — shows real ball position
+    const [sx, sy] = cam.project(this.ball.x, this.ball.y, 0);
+    const shadowScale = Math.max(0.35, 1 - this.ball.z * 0.18);
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 2, r * 1.1 * shadowScale, r * 0.32 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Ball
     const g = ctx.createRadialGradient(bx - r * 0.3, by - r * 0.3, r * 0.1, bx, by, r);
     g.addColorStop(0, '#fff'); g.addColorStop(1, '#e8dcc8');
     ctx.fillStyle = g;
@@ -860,6 +1125,14 @@ export class CourtView {
     ctx.strokeStyle = '#c45c26'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(bx - r, by); ctx.quadraticCurveTo(bx, by - r * 0.25, bx + r, by); ctx.stroke();
+    // Bounce flash
+    if (this.ball.bounceT > 0) {
+      ctx.globalAlpha = Math.min(1, this.ball.bounceT);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sx, sy, r * 1.8 * (1.2 - this.ball.bounceT), 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 }
 

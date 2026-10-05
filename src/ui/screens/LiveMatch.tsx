@@ -53,6 +53,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
     view.showLabels = true;
     view.replayMode = ctx.settings.replay;
     viewRef.current = view;
+    (window as unknown as { __hsvlView?: CourtView }).__hsvlView = view;
     setRotation(sim.st.teams[0].rotation.slice());
     setBench(sim.st.teams[0].bench.slice());
 
@@ -67,10 +68,10 @@ export function LiveMatch({ team, opponent, mode, seed }: {
       const v = viewRef.current!;
       const s = simRef.current!;
 
-      if (!pausedRef.current && !s.finished && !v.replay) {
+      if (!pausedRef.current && !s.finished && !v.replay && !v.holdFrozen) {
         accum.current += dt * speedRef.current;
         const interval = 0.9 / Math.max(1, speedRef.current * 0.55);
-        while (accum.current >= interval && !s.finished && !v.replay) {
+        while (accum.current >= interval && !s.finished && !v.replay && !v.holdFrozen) {
           accum.current -= interval;
           const evs = s.step();
           v.setLineups([s.st.teams[0].rotation.slice(), s.st.teams[1].rotation.slice()]);

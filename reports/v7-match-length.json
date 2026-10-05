@@ -1,0 +1,11 @@
+{
+  "meanContacts": 6.7274419617755665,
+  "meanRallyPresentSec_watch": 11.64,
+  "betweenPointSec_watch": 1.7999999999999998,
+  "perPointSec_watch": 13.44,
+  "perPointSec_broadcast": 18.15,
+  "estBo5Min_v6_legacy": 16.4,
+  "estBo5Min_watch_1x": 36,
+  "estBo5Min_broadcast": 36.4,
+  "note": "Bo5 wall-clock estimate from rally mix + pace constants (not a live timer)."
+}

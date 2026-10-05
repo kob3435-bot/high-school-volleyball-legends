@@ -3,6 +3,7 @@ import { Ctx } from '../store';
 import { MatchSim } from '../../engine/Match';
 import type { TeamConfig } from '../../engine/types';
 import { CourtView } from '../render/CourtView';
+import { PACE, type PacePreset } from '../render/Pace';
 import { sfxForEvent } from '../sound';
 import { OFF_TACTICS, DEF_TACTICS } from '../../engine/types';
 import { setTactics } from '../../engine/TacticalEngine';
@@ -18,7 +19,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   const simRef = useRef<MatchSim | null>(null);
   const viewRef = useRef<CourtView | null>(null);
   const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState(ctx.settings.gameSpeed);
+  const [pace, setPace] = useState<PacePreset>(ctx.settings.gameSpeed === 2 ? '2x' : ctx.settings.gameSpeed === 4 ? '4x' : 'watch');
   const [commentary, setCommentary] = useState('…');
   const [score, setScore] = useState<[number, number]>([0, 0]);
   const [sets, setSets] = useState<[number, number]>([0, 0]);
@@ -36,9 +37,11 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   const playedIdx = useRef(0);
   const last = useRef(0);
   const pausedRef = useRef(false);
-  const speedRef = useRef(speed);
+  const huddleUIRef = useRef(false);
+  const speedRef = useRef(1);
   pausedRef.current = paused;
-  speedRef.current = speed;
+  huddleUIRef.current = huddleUI;
+  speedRef.current = PACE[pace].simSpeed;
 
   useEffect(() => {
     const sim = new MatchSim(team, opponent, seed, {
@@ -53,6 +56,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
     view.graphics = ctx.settings.graphics === 'auto' ? 'high' : ctx.settings.graphics;
     view.showLabels = true;
     view.replayMode = ctx.settings.replay;
+    view.setPace(pace);
     viewRef.current = view;
     (window as unknown as { __hsvlView?: CourtView }).__hsvlView = view;
     setRotation(sim.st.teams[0].rotation.slice());
@@ -68,6 +72,11 @@ export function LiveMatch({ team, opponent, mode, seed }: {
       last.current = now;
       const v = viewRef.current!;
       const s = simRef.current!;
+      // Auto-end huddle pause when visual timeout hold finishes
+      if (pausedRef.current && v.timeoutHold <= 0 && v.huddle === false && huddleUIRef.current) {
+        setHuddleUI(false);
+        setPaused(false);
+      }
 
       // Advance sim only when the view finished the previous rally (full point playback)
       if (!pausedRef.current && !s.finished && !v.replay && !v.holdFrozen && v.isIdle()) {
@@ -81,7 +90,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           v.serving = s.st.serving;
           v.apply(evs);
           for (const e of evs) {
-            if (e.type === 'timeout') { setHuddleUI(true); setPaused(true); }
+            if (e.type === 'timeout') { setHuddleUI(true); /* view.timeoutHold gates isIdle */ }
           }
           setScore([s.st.teams[0].score, s.st.teams[1].score]);
           setSets([...s.st.setsWon] as [number, number]);
@@ -149,14 +158,19 @@ export function LiveMatch({ team, opponent, mode, seed }: {
 
   const doTimeout = () => {
     simRef.current?.requestTimeout(0);
-    viewRef.current?.showHuddle(true);
+    const v = viewRef.current;
+    if (v) {
+      v.showHuddle(true);
+      v.timeoutHold = Math.max(v.timeoutHold, 17 * v.paceScale);
+    }
     setHuddleUI(true);
     setPaused(true);
     setPanelOpen(true);
   };
 
   const closeHuddle = () => {
-    viewRef.current?.showHuddle(false);
+    const v = viewRef.current;
+    if (v) { v.showHuddle(false); v.timeoutHold = 0; }
     setHuddleUI(false);
     setPaused(false);
   };
@@ -194,9 +208,17 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           </div>
           <div class="live-controls">
             <button class="btn sm" data-testid="btn-pause" onClick={() => setPaused((p) => !p)}>{paused ? t(lang, 'resume') : t(lang, 'pause')}</button>
-            {[1, 2, 4].map((sp) => (
-              <button key={sp} class={`btn sm ${speed === sp ? 'primary' : ''}`} data-testid={`speed-${sp}`}
-                onClick={() => setSpeed(sp as 1 | 2 | 4)}>{sp}x</button>
+            {([
+              ['broadcast', 'Broadcast'] as const,
+              ['watch', '1x'] as const,
+              ['2x', '2x'] as const,
+              ['4x', '4x'] as const,
+            ]).map(([key, label]) => (
+              <button key={key} class={`btn sm ${pace === key ? 'primary' : ''}`} data-testid={`speed-${key === 'watch' ? '1' : key === '2x' ? '2' : key === '4x' ? '4' : key}`}
+                onClick={() => {
+                  setPace(key);
+                  viewRef.current?.setPace(key);
+                }}>{label}</button>
             ))}
             <div class="live-controls-extra">
               <button class="btn sm" data-testid="btn-skip-rally" onClick={skipRally}>{t(lang, 'skipRally')}</button>

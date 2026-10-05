@@ -1,0 +1,27 @@
+{
+  "constants": {
+    "BASE_BEAT_serve": 1.85,
+    "BASE_BEAT_receive": 1.15,
+    "BASE_BEAT_set": 1.35,
+    "BASE_BEAT_attack": 1.15,
+    "BASE_BEAT_dig": 1.25,
+    "BETWEEN_POINT_BASE": 1.65,
+    "SET_BREAK_BASE": 11,
+    "TIMEOUT_BASE": 17,
+    "pace_broadcast": 1.35,
+    "pace_watch": 1.0,
+    "pace_2x": 0.55,
+    "pace_4x": 0.32
+  },
+  "estimate": {
+    "meanContacts": 6.7274419617755665,
+    "meanRallyPresentSec_watch": 11.64,
+    "betweenPointSec_watch": 1.7999999999999998,
+    "perPointSec_watch": 13.44,
+    "perPointSec_broadcast": 18.15,
+    "estBo5Min_v6_legacy": 16.4,
+    "estBo5Min_watch_1x": 36,
+    "estBo5Min_broadcast": 36.4,
+    "note": "Bo5 wall-clock estimate from rally mix + pace constants (not a live timer)."
+  }
+}

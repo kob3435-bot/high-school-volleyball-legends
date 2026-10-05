@@ -7,6 +7,7 @@ import {
   makeFlight, stepFlight, contactHeight, timeToApex, jumpHeightFromAttr, handOffset,
   type Flight, type Spin, type Vec3,
 } from './BallPhysics';
+import { beatFor, betweenPointSec, SET_BREAK_BASE, TIMEOUT_BASE, type PacePreset } from './Pace';
 
 interface Char {
   id: string; team: 0 | 1; num: number; name: string; heightCm: number;
@@ -14,6 +15,7 @@ interface Char {
   signatures: string[];
   jumpAttr: number;
   x: number; y: number; // court: x 0-18 length, y 0-9 width (0 = near sideline / camera)
+  homeX: number; homeY: number;
   tx: number; ty: number;
   anim: Anim; animT: number; prevAnim: Anim; blend: number;
   jumpH: number; expression: number; facing: number;
@@ -75,6 +77,14 @@ export class CourtView {
   /** Ordered contact log for Playwright */
   playedLog: { type: string; kind?: string; t: number }[] = [];
   private skipPlayback = false;
+  /** Presentation scale (Broadcast > watch/1x > 2x/4x) */
+  paceScale = 1;
+  pacePreset: PacePreset = 'watch';
+  setBreakHold = 0;
+  timeoutHold = 0;
+  scorePulse = 0;
+  setBreakInfo: { set: number; score: [number, number]; mvp: string } | null = null;
+  serverRitualT = 0;
   private pendingOutbound: { from: Vec3; to: Vec3; spin: Spin; delay: number } | null = null;
   colors: [[string, string], [string, string]];
   score: [number, number] = [0, 0];
@@ -130,7 +140,7 @@ export class CourtView {
             jumpAttr: def?.attrs?.jump ?? 70,
             x: 0, y: 0, tx: 0, ty: 0,
             anim: 'ready', animT: 0, prevAnim: 'ready', blend: 1,
-            jumpH: 0, expression: 0, facing: team === 0 ? 1 : -1,
+            homeX: 0, homeY: 0, jumpH: 0, expression: 0, facing: team === 0 ? 1 : -1,
             starSig: null, cue: null,
           };
           this.chars.set(id, c);
@@ -138,6 +148,7 @@ export class CourtView {
         c.team = team;
         c.isLibero = def?.pos === 'L' || c.isLibero;
         const pos = zoneToPos(i + 1, team);
+        c.homeX = pos[0]; c.homeY = pos[1];
         c.tx = pos[0]; c.ty = pos[1];
         if (c.x === 0 && c.y === 0) { c.x = c.tx; c.y = c.ty; }
       });
@@ -160,6 +171,9 @@ export class CourtView {
   applyInstant(events: SimEvent[]) {
     while (this.eventQueue.length) this.playEventNow(this.eventQueue.shift()!);
     this.betweenPointHold = 0;
+    this.setBreakHold = 0;
+    this.timeoutHold = 0;
+    this.setBreakInfo = null;
     this.busyUntil = this.time;
     for (const e of events) this.playEventNow(e);
   }
@@ -167,7 +181,7 @@ export class CourtView {
   /** True when live loop may step the next rally. */
   isIdle(): boolean {
     if (this.holdFrozen || this.replay) return false;
-    if (this.betweenPointHold > 0) return false;
+    if (this.betweenPointHold > 0 || this.setBreakHold > 0 || this.timeoutHold > 0) return false;
     if (this.eventQueue.length > 0) return false;
     if (this.time < this.busyUntil - 0.02) return false;
     return true;
@@ -177,7 +191,7 @@ export class CourtView {
     this.handleEvent(e);
     if (this.isImportant(e)) this.importantBuf.push(e);
     // Track played contacts for e2e / commentary pacing
-    const contactish = ['serve','receive','set','attack','kill','block','softBlock','dig','ace','blockPoint','setterDump','transition','cover'];
+    const contactish = ['serve','receive','set','attack','kill','block','softBlock','dig','ace','blockPoint','setterDump','transition','cover','setEnd','point','rallyEnd'];
     if (contactish.includes(e.type)) {
       this.playedLog.push({ type: e.type, kind: e.kind, t: this.time });
       if (this.playedLog.length > 120) this.playedLog.shift();
@@ -189,7 +203,10 @@ export class CourtView {
       this.crowd = Math.max(0.25, this.crowd * 0.7);
     }
     if (e.type === 'point') {
-      this.busyUntil = Math.max(this.busyUntil, this.time + 0.4);
+      this.scorePulse = 1.2 * this.paceScale;
+      this.flash = { text: `${this.score[0]} – ${this.score[1]}`, t: 1.1 * this.paceScale, color: '#ffd166' };
+      this.refSignal = 'whistle'; this.refSignalT = 1.1 * this.paceScale;
+      this.busyUntil = Math.max(this.busyUntil, this.time + 0.55 * this.paceScale);
       if (this.replayMode !== 'off' && !this.replay && this.importantBuf.length >= 2) {
         const want = this.replayMode === 'on' || this.replayMode === 'important';
         if (want) {
@@ -199,9 +216,34 @@ export class CourtView {
       }
     }
     if (e.type === 'rallyEnd') {
-      // Celebrate / whistle / score beat before next serve
-      this.betweenPointHold = 0.7 + Math.min(0.35, this.rallyTouches * 0.025);
-      this.busyUntil = Math.max(this.busyUntil, this.time + 0.45);
+      // Whistle, score flash, walk to base, server prepares
+      this.betweenPointHold = betweenPointSec(this.rallyTouches, this.paceScale);
+      this.busyUntil = Math.max(this.busyUntil, this.time + 0.55 * this.paceScale);
+      this.resetPlayersToHome(true);
+      this.benchEnergy = Math.min(1, this.benchEnergy + 0.25);
+    }
+    if (e.type === 'setEnd') {
+      const sc = e.score || this.score;
+      // MVP of set: highest expression / last killer heuristic — use event player or top jersey
+      let mvp = '—';
+      if (e.player) mvp = this.chars.get(e.player)?.name ?? '—';
+      else {
+        const list = [...this.chars.values()].filter((c) => c.team === (e.team ?? 0));
+        mvp = list.sort((a, b) => b.expression - a.expression)[0]?.name ?? '—';
+      }
+      this.setBreakInfo = { set: e.set || this.setNumber, score: [sc[0], sc[1]], mvp };
+      this.setBreakHold = SET_BREAK_BASE * this.paceScale;
+      this.crowd = 1;
+      this.flash = { text: `SET ${this.setBreakInfo.set}`, t: 2.2 * this.paceScale, color: '#fff' };
+    }
+    if (e.type === 'setStart') {
+      this.setBreakHold = 0;
+      this.setBreakInfo = null;
+      this.resetPlayersToHome(false);
+    }
+    if (e.type === 'timeout') {
+      this.timeoutHold = TIMEOUT_BASE * this.paceScale;
+      this.showHuddle(true);
     }
     // Pace until ball/players finish this contact beat
     this.busyUntil = Math.max(this.busyUntil, this.time + this.eventBeat(e));
@@ -210,23 +252,22 @@ export class CourtView {
   }
 
   private eventBeat(e: SimEvent): number {
-    switch (e.type) {
-      case 'serve': return 1.05;
-      case 'receive': return 0.72;
-      case 'set': return 0.88;
-      case 'attack': return 0.70;
-      case 'kill': return 0.85;
-      case 'block': case 'softBlock': return 0.55;
-      case 'blockPoint': return 0.9;
-      case 'dig': return 0.78;
-      case 'transition': return 0.35;
-      case 'cover': return 0.25;
-      case 'ace': return 1.0;
-      case 'setterDump': return 0.75;
-      case 'signature': return 0.45;
-      case 'rallyEnd': case 'point': return 0.55;
-      case 'rallyStart': return 0.2;
-      default: return 0.15;
+    return beatFor(e.type, this.paceScale);
+  }
+
+  setPace(preset: PacePreset) {
+    this.pacePreset = preset;
+    const map: Record<PacePreset, number> = { broadcast: 1.35, watch: 1.0, '2x': 0.55, '4x': 0.32 };
+    this.paceScale = map[preset];
+  }
+
+  private resetPlayersToHome(walk = true) {
+    for (const c of this.chars.values()) {
+      if (c.homeX || c.homeY) {
+        c.tx = c.homeX; c.ty = c.homeY;
+        if (!walk) { c.x = c.homeX; c.y = c.homeY; }
+        else if (Math.hypot(c.x - c.homeX, c.y - c.homeY) > 0.4) this.setAnim(c, 'run');
+      }
     }
   }
 
@@ -269,6 +310,7 @@ export class CourtView {
         if (c) { this.setAnim(c, 'celebrate'); c.expression = 1; }
       }
       const matchPoint = Math.max(this.score[0], this.score[1]) >= 24 || (this.setNumber >= 5 && Math.max(this.score[0], this.score[1]) >= 14);
+      if (matchPoint) { this.crowd = 1; this.benchEnergy = 1; this.flash = { text: Math.max(this.score[0], this.score[1]) >= (this.setNumber >= 5 ? 14 : 24) && Math.abs(this.score[0]-this.score[1]) >= 1 ? 'SET POINT' : 'CLOSE!', t: 1.4 * this.paceScale, color: '#ff6b6b' }; }
       this.setCam('closeup', this.ball.x, Math.min(5, this.ball.y), 1.25, 1.2);
     }
     if (e.type === 'serveError' || e.type === 'attackError' || e.type === 'receiveError') {
@@ -378,11 +420,12 @@ export class CourtView {
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
         const toRecv = target ?? [...this.chars.values()].find((c) => c.team !== actor.team);
         // Toss/plant then contact
-        const contactIn = jump ? 0.55 : 0.35;
-        actor.tx = actor.x; actor.ty = actor.y;
+        const contactIn = (jump ? 0.95 : 0.7) * this.paceScale;
+        this.serverRitualT = 0.55 * this.paceScale;
+        actor.tx = actor.homeX || actor.x; actor.ty = actor.homeY || actor.y;
         this.cueContact(actor, kind, now + contactIn, z);
-        // Ball starts at toss height then to receiver platform
-        this.ball.x = actor.x; this.ball.y = actor.y; this.ball.z = jump ? 2.6 : 2.1;
+        // Toss hold then hit
+        this.ball.x = actor.x; this.ball.y = actor.y; this.ball.z = jump ? 2.7 : 2.2;
         if (toRecv) {
           const hz = contactHeight('receive', toRecv.heightCm, toRecv.jumpAttr);
           const hand = this.handWorld(toRecv, 'receive', hz);
@@ -404,8 +447,7 @@ export class CourtView {
         // Intercept: move under current ball projection
         actor.tx = this.ball.x - handOffset(kind, actor.facing, actor.team).dx;
         actor.ty = this.ball.y;
-        const arrive = 0.28;
-        // Retarget ball to hand
+        const arrive = 0.48 * this.paceScale;
         this.launchBall(hand, 'none', arrive);
         this.cueContact(actor, kind, now + arrive, z);
         // Outbound toward setter area after contact
@@ -424,7 +466,7 @@ export class CourtView {
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
         const hand = this.handWorld(actor, kind, z);
         actor.tx = this.ball.x; actor.ty = this.ball.y;
-        const arrive = 0.32;
+        const arrive = 0.55 * this.paceScale;
         this.launchBall(hand, 'none', arrive);
         this.cueContact(actor, kind, now + arrive, z);
         if (target) {
@@ -435,7 +477,7 @@ export class CourtView {
           const netSide = target.team === 0 ? Math.min(target.x + 0.6, 8.4) : Math.max(target.x - 0.6, 9.6);
           target.tx = netSide; target.ty = aHand.y;
           this.setAnim(target, 'approach');
-          const setDur = 0.38;
+          const setDur = 0.62 * this.paceScale;
           this.pendingOutbound = {
             from: hand,
             to: aHand,
@@ -466,7 +508,7 @@ export class CourtView {
         const hand = this.handWorld(actor, kind, z);
         actor.tx = hand.x - handOffset(kind, actor.facing, actor.team).dx;
         actor.ty = hand.y;
-        const arrive = 0.22;
+        const arrive = 0.42 * this.paceScale;
         this.launchBall(hand, 'none', arrive);
         this.cueContact(actor, kind, now + arrive, z);
         const landX = actor.team === 0 ? 11 + Math.random() * 5 : 2 + Math.random() * 5;
@@ -488,8 +530,7 @@ export class CourtView {
         const hand = this.handWorld(actor, 'block', z);
         actor.tx = 9 + (actor.team === 0 ? -0.35 : 0.35);
         actor.ty = this.ball.y;
-        const arrive = 0.18;
-        // Ball deflects off hands
+        const arrive = 0.32 * this.paceScale;
         this.launchBall(hand, 'spike', arrive);
         this.cueContact(actor, 'block', now + arrive, z);
         if (e.type === 'blockPoint') {
@@ -571,9 +612,17 @@ export class CourtView {
 
     // Replay playback
     let d = dt;
-    if (this.betweenPointHold > 0) {
-      this.betweenPointHold = Math.max(0, this.betweenPointHold - d);
+    if (this.betweenPointHold > 0) this.betweenPointHold = Math.max(0, this.betweenPointHold - d);
+    if (this.setBreakHold > 0) {
+      this.setBreakHold = Math.max(0, this.setBreakHold - d);
+      if (this.setBreakHold <= 0) this.setBreakInfo = null;
     }
+    if (this.timeoutHold > 0) {
+      this.timeoutHold = Math.max(0, this.timeoutHold - d);
+      if (this.timeoutHold <= 0) this.showHuddle(false);
+    }
+    if (this.scorePulse > 0) this.scorePulse = Math.max(0, this.scorePulse - d);
+    if (this.serverRitualT > 0) this.serverRitualT = Math.max(0, this.serverRitualT - d);
     // Drain one queued event when the previous beat finished (hold only gates next rally step)
     if (!this.replay && this.eventQueue.length && this.time >= this.busyUntil - 1e-4) {
       const next = this.eventQueue.shift()!;
@@ -738,6 +787,7 @@ export class CourtView {
     this.drawBurst(ctx, cam, w, h);
 
     if (this.huddle) this.drawHuddleOverlay(ctx, w, h);
+    if (this.setBreakHold > 0 && this.setBreakInfo) this.drawSetBreakOverlay(ctx, w, h);
     if (this.replay) {
       ctx.fillStyle = 'rgba(255, 209, 102, 0.9)';
       ctx.font = `bold ${Math.floor(h * 0.035)}px sans-serif`;
@@ -1130,6 +1180,28 @@ export class CourtView {
     ctx.font = `${Math.floor(h * 0.025)}px sans-serif`;
     ctx.fillText('Adjust tactics · Sub players · Reset momentum', w / 2, h * 0.35 + 70);
     ctx.textAlign = 'left';
+  }
+
+  private drawSetBreakOverlay(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    const info = this.setBreakInfo!;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,12,24,0.72)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd166';
+    ctx.font = `bold ${Math.max(28, w * 0.045)}px sans-serif`;
+    ctx.fillText(`END OF SET ${info.set}`, w / 2, h * 0.32);
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${Math.max(42, w * 0.07)}px sans-serif`;
+    ctx.fillText(`${info.score[0]}  –  ${info.score[1]}`, w / 2, h * 0.48);
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = `${Math.max(16, w * 0.025)}px sans-serif`;
+    ctx.fillText(`Set MVP: ${info.mvp}`, w / 2, h * 0.58);
+    ctx.fillStyle = '#6c8a9e';
+    ctx.font = `${Math.max(13, w * 0.018)}px sans-serif`;
+    const remain = Math.ceil(this.setBreakHold);
+    ctx.fillText(`Next set in ${remain}s · sides change`, w / 2, h * 0.68);
+    ctx.restore();
   }
 
   private shouldShowLabel(c: Char): boolean {

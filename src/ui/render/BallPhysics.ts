@@ -24,16 +24,16 @@ const G = 9.81;
 export function flightDuration(p0: Vec3, p1: Vec3, spin: Spin): number {
   const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
   const dz = Math.abs(p1.z - p0.z);
-  let speed = 9; // m/s typical pass
-  if (spin === 'spike') speed = 22;
-  else if (spin === 'serve') speed = 16;
-  else if (spin === 'topspin') speed = 14;
-  else if (spin === 'float') speed = 12;
+  let speed = 7.2; // m/s typical pass (watch pace)
+  if (spin === 'spike') speed = 16;
+  else if (spin === 'serve') speed = 12;
+  else if (spin === 'topspin') speed = 11;
+  else if (spin === 'float') speed = 9.5;
   else if (dist < 4) speed = 7; // set
   const base = Math.max(0.22, dist / speed + dz * 0.05);
-  if (spin === 'spike') return Math.max(0.18, Math.min(0.55, base));
-  if (spin === 'serve') return Math.max(0.45, Math.min(1.35, base));
-  return Math.max(0.28, Math.min(1.5, base));
+  if (spin === 'spike') return Math.max(0.28, Math.min(0.85, base * 1.25));
+  if (spin === 'serve') return Math.max(0.7, Math.min(1.9, base * 1.3));
+  return Math.max(0.42, Math.min(2.1, base * 1.3));
 }
 
 export function makeFlight(p0: Vec3, p1: Vec3, spin: Spin, durOverride?: number): Flight {

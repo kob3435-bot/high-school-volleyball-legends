@@ -49,7 +49,8 @@ export function sfx(kind: string, pan = 0) {
     case 'contact': noise(0.04, 0.1, pan); beep(220, 0.05, 'square', 0.04, pan); break;
     case 'spike': noise(0.08, 0.14, pan); beep(140, 0.1, 'sawtooth', 0.06, pan); break;
     case 'block': beep(90, 0.12, 'square', 0.1, pan); noise(0.1, 0.08, pan); break;
-    case 'dig': noise(0.05, 0.07, pan); break;
+    case 'dig': noise(0.055, 0.09, pan); beep(160, 0.04, 'triangle', 0.04, pan); break;
+    case 'set': beep(260, 0.045, 'sine', 0.05, pan); noise(0.03, 0.04, pan); break;
     case 'whistle': beep(1200, 0.15, 'sine', 0.08); beep(1400, 0.2, 'sine', 0.06); break;
     case 'cheer': noise(0.4, 0.06); beep(400, 0.3, 'triangle', 0.03); break;
     case 'squeak': beep(900 + Math.random() * 200, 0.04, 'sine', 0.03, pan); break;
@@ -65,5 +66,9 @@ export function sfxForEvent(type: string, team?: 0 | 1) {
   else if (type === 'block' || type === 'blockPoint') sfx('block', pan);
   else if (type === 'dig' || type === 'receive') sfx('dig', pan);
   else if (type === 'ace' || type === 'point') { sfx('whistle'); sfx('cheer'); }
-  else if (type === 'set') sfx('contact', pan);
+  else if (type === 'set') sfx('set', pan);
 }
+
+/** Play a low-level sfx kind (used at exact contact frames). */
+export function sfxKind(kind: string, pan = 0) { sfx(kind, pan); }
+

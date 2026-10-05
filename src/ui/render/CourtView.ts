@@ -85,6 +85,9 @@ export class CourtView {
   scorePulse = 0;
   setBreakInfo: { set: number; score: [number, number]; mvp: string } | null = null;
   serverRitualT = 0;
+  impactFlash: { x: number; y: number; z: number; t: number } | null = null;
+  /** SFX queued at true contact frames for LiveMatch */
+  pendingSfx: { kind: string; pan: number }[] = [];
   private pendingOutbound: { from: Vec3; to: Vec3; spin: Spin; delay: number } | null = null;
   colors: [[string, string], [string, string]];
   score: [number, number] = [0, 0];
@@ -252,7 +255,12 @@ export class CourtView {
   }
 
   private eventBeat(e: SimEvent): number {
-    return beatFor(e.type, this.paceScale);
+    let b = beatFor(e.type, this.paceScale);
+    // Overlap follow-through with next beat — keeps rally feeling continuous (not a slideshow)
+    if (!['rallyEnd', 'point', 'rallyStart', 'setEnd', 'setStart', 'ace', 'timeout'].includes(e.type)) {
+      b *= 0.72;
+    }
+    return b;
   }
 
   setPace(preset: PacePreset) {
@@ -364,8 +372,13 @@ export class CourtView {
       : 0.3;
     c.cue = { contactAt, takeoffAt, landAt, peakAnimT, contactZ, kind };
     c.jumpH = jH;
-    this.setAnim(c, kind);
-    // Pre-seek animT so at contactAt we hit peakAnimT
+    // Athletic approach / plant before takeoff (no instant jump pose)
+    if (needsJump && this.time < takeoffAt - 0.05) {
+      const approachKinds = ['spike','quickSpike','backAttack','jumpServe','jumpFloat'];
+      this.setAnim(c, approachKinds.includes(kind) ? 'approach' : 'ready');
+    } else {
+      this.setAnim(c, kind);
+    }
     const lead = Math.max(0, contactAt - this.time);
     c.animT = Math.max(0, peakAnimT - lead);
   }
@@ -384,11 +397,19 @@ export class CourtView {
       hand: { ...hand }, dist,
     });
     if (this.debugContacts.length > 80) this.debugContacts.shift();
+    this.impactFlash = { x: hand.x, y: hand.y, z: hand.z, t: 0.28 };
+    const pan = c.team === 0 ? -0.35 : 0.35;
+    const sfxKind = /spike|Spike|backAttack|kill|tip|dump/.test(kind) ? 'spike'
+      : kind === 'block' || kind === 'eyeTrack' ? 'block'
+      : kind === 'dig' || kind === 'dive' || kind === 'receive' ? 'dig'
+      : kind === 'set' || kind === 'jumpSet' ? 'set'
+      : kind.includes('erve') || kind.includes('Serve') ? 'serve'
+      : 'contact';
+    this.pendingSfx.push({ kind: sfxKind, pan });
     if (this.autoFreezeKinds.length && this.autoFreezeKinds.some((k) => kind === k || kind.includes(k))) {
       this.holdFrozen = true;
       this.frozenContact = { kind, playerId: c.id, t: this.time };
-      // Hold contact pose: keep cue alive briefly
-      if (c.cue) c.cue.landAt = Math.max(c.cue.landAt, this.time + 0.6);
+      if (c.cue) c.cue.landAt = Math.max(c.cue.landAt, this.time + 0.55);
     }
   }
 
@@ -440,7 +461,7 @@ export class CourtView {
       }
       case 'receive': case 'dig': {
         if (!actor) break;
-        const dive = e.type === 'dig' && Math.random() > 0.55;
+        const dive = e.type === 'dig' && (e.quality !== undefined ? Number(e.quality) < 0.35 : Math.random() > 0.5);
         const kind: Anim = dive ? 'dive' : (e.type === 'dig' ? 'dig' : 'receive');
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
         const hand = this.handWorld(actor, kind, z);
@@ -521,7 +542,7 @@ export class CourtView {
           delay: arrive,
         };
         this.shake = 0.3;
-        this.setCam('net', 9, Math.min(5, actor.y), 1.22, 0.9);
+        this.setCam('net', 9, Math.min(5, actor.y), 1.28, 0.75);
         break;
       }
       case 'block': case 'blockPoint': case 'softBlock': {
@@ -550,7 +571,7 @@ export class CourtView {
             delay: arrive,
           };
         }
-        this.setCam('net', 9, Math.min(5, actor.y), 1.22, 1.1);
+        this.setCam('net', 9, Math.min(5, actor.y), 1.3, 0.85);
         break;
       }
       case 'blockOut': {
@@ -645,6 +666,7 @@ export class CourtView {
     this.playT += d;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - d * 2.2);
     if (this.flash) { this.flash.t -= d; if (this.flash.t <= 0) this.flash = null; }
+    if (this.impactFlash) { this.impactFlash.t -= d; if (this.impactFlash.t <= 0) this.impactFlash = null; }
     if (this.burst) { this.burst.t -= d; if (this.burst.t <= 0) this.burst = null; }
     if (this.huddle) this.huddleT += d;
     this.crowd = Math.max(0.28, this.crowd - d * 0.04);
@@ -652,23 +674,25 @@ export class CourtView {
     if (this.refSignalT > 0) { this.refSignalT -= d; if (this.refSignalT <= 0) this.refSignal = 'none'; }
 
     // Smooth camera
-    const k = 1 - Math.pow(0.001, d);
+    // Critically damped-ish follow (smooth, no overshoot jitter)
+    const k = 1 - Math.pow(0.0003, d);
     this.cam.focusX += (this.cam.tfx - this.cam.focusX) * k;
     this.cam.focusY += (this.cam.tfy - this.cam.focusY) * k;
-    this.cam.zoom += (this.cam.tzoom - this.cam.zoom) * k;
+    this.cam.zoom += (this.cam.tzoom - this.cam.zoom) * Math.min(1, k * 1.1);
     if (this.cam.timer > 0) {
       this.cam.timer -= d;
       if (this.cam.timer <= 0 && this.cam.mode !== 'courtside' && !this.replay) {
         this.setCam('courtside', 9, 3.5, this.mobile ? 1.2 : 1.05, 0.6);
       }
     }
-    // Mobile: always ease toward ball
-    if (this.mobile && !this.replay) {
-      // Keep full court width — mild ball bias, never clip far-side wings
-      this.cam.tfx = 9 * 0.75 + this.ball.x * 0.25;
-      this.cam.tfx = Math.min(11, Math.max(7, this.cam.tfx));
-      this.cam.tfy = 3.5 * 0.7 + Math.min(5, this.ball.y) * 0.3;
-      this.cam.tzoom = 1.02;
+    // Gentle courtside follow of the ball (damped — never jittery)
+    if (!this.replay && this.cam.mode === 'courtside') {
+      const bias = this.mobile ? 0.32 : 0.22;
+      this.cam.tfx = 9 * (1 - bias) + this.ball.x * bias;
+      this.cam.tfx = Math.min(11.2, Math.max(6.8, this.cam.tfx));
+      this.cam.tfy = 3.4 * 0.75 + Math.min(5.5, this.ball.y) * 0.25;
+      // Default zoom; contact cams set tzoom temporarily
+      if (this.cam.timer <= 0) this.cam.tzoom = this.mobile ? 1.05 : 1.02;
     }
 
     // Pending outbound after contact delay
@@ -686,9 +710,11 @@ export class CourtView {
     if (this.ball.flight) {
       const { pos, done } = stepFlight(this.ball.flight, d);
       this.ball.x = pos.x; this.ball.y = pos.y; this.ball.z = pos.z;
-      if (this.graphics !== 'low') {
+      if (this.graphics !== 'low' && this.ball.spin === 'spike') {
         this.ball.trail.push({ ...pos });
-        if (this.ball.trail.length > 16) this.ball.trail.shift();
+        if (this.ball.trail.length > 12) this.ball.trail.shift();
+      } else if (this.ball.trail.length) {
+        this.ball.trail.shift();
       }
       if (done) {
         // Floor bounce if near ground
@@ -711,6 +737,9 @@ export class CourtView {
         c.y += (dy / dist) * m;
         if ((c.anim === 'ready' || c.anim === 'idle') && !c.cue) this.setAnim(c, 'run');
         c.facing = dx > 0.05 ? 1 : dx < -0.05 ? -1 : c.facing;
+        if (c.anim === 'run' && dist < 0.55 && Math.random() < d * 2.5) {
+          this.pendingSfx.push({ kind: 'squeak', pan: c.team === 0 ? -0.3 : 0.3 });
+        }
       } else if ((c.anim === 'run' || c.anim === 'sideStep') && !c.cue) {
         this.setAnim(c, 'ready');
       }
@@ -720,10 +749,20 @@ export class CourtView {
         const cue = c.cue;
         const until = cue.contactAt - this.time;
         if (until > 0) {
-          // Ease animT toward peak at contact
-          c.animT = cue.peakAnimT - until;
-          if (c.animT < 0) c.animT = 0;
-          c.anim = cue.kind;
+          // Phase: approach/plant → contact anim at takeoff → peak at contact
+          if (this.time < cue.takeoffAt) {
+            const approachKinds = ['spike','quickSpike','backAttack','jumpServe','jumpFloat'];
+            const want: Anim = approachKinds.includes(cue.kind) ? 'approach'
+              : cue.kind === 'block' || cue.kind === 'eyeTrack' ? 'ready'
+              : cue.kind;
+            if (c.anim !== want) this.setAnim(c, want);
+            c.animT += d;
+          } else {
+            if (c.anim !== cue.kind) this.setAnim(c, cue.kind);
+            // Ease animT toward peak at contact
+            c.animT = cue.peakAnimT - until;
+            if (c.animT < 0) c.animT = 0;
+          }
         } else if (this.time < cue.landAt) {
           // Past contact — follow through then land
           c.animT = cue.peakAnimT + (this.time - cue.contactAt);
@@ -739,7 +778,9 @@ export class CourtView {
             this.recordContact(cue.kind, c, hand);
             cue.recorded = true;
           }
-          if (this.time > cue.contactAt + 0.18 && ['spike','quickSpike','block','jumpServe','jumpFloat','backAttack','eyeTrack','jumpSet'].includes(c.anim)) {
+          if (this.time > cue.contactAt + 0.12 && cue.kind === 'dive' && c.anim === 'dive') {
+            this.setAnim(c, 'roll');
+          } else if (this.time > cue.contactAt + 0.2 && ['spike','quickSpike','block','jumpServe','jumpFloat','backAttack','eyeTrack','jumpSet'].includes(c.anim)) {
             if (c.anim !== 'landing') this.setAnim(c, 'landing');
           }
         } else {
@@ -755,7 +796,7 @@ export class CourtView {
         if (c.anim === 'landing' && c.animT > 0.3) this.setAnim(c, 'ready');
       }
 
-      c.blend = Math.min(1, c.blend + d * 4);
+      c.blend = Math.min(1, c.blend + d * 7.5);
       if (c.expression !== 0) c.expression *= 0.985;
       if (c.starSig && c.animT > 1.2) c.starSig = null;
     }
@@ -764,7 +805,7 @@ export class CourtView {
   draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
     this.mobile = w < 700;
     ctx.save();
-    if (this.shake > 0) ctx.translate((Math.random() - 0.5) * 12 * this.shake, (Math.random() - 0.5) * 9 * this.shake);
+    if (this.shake > 0) ctx.translate(Math.sin(this.time * 38) * 5 * this.shake, Math.cos(this.time * 31) * 3.5 * this.shake);
 
     const cam = this.makeCam(w, h);
     this.drawGym(ctx, w, h);
@@ -1207,9 +1248,8 @@ export class CourtView {
   private shouldShowLabel(c: Char): boolean {
     if (this.labelMode === 'off' || !this.showLabels) return false;
     if (this.labelMode === 'all') return true;
-    if (this.involved.has(c.id)) return true;
-    if (['spike','quickSpike','block','receive','dig','dive','set','jumpSet','serve','jumpServe','jumpFloat','celebrate'].includes(c.anim)) return true;
-    return false;
+    // Smart: only ball-involved players (cuts clutter mid-rally)
+    return this.involved.has(c.id);
   }
 
   private drawChar(ctx: CanvasRenderingContext2D, c: Char, cam: ReturnType<CourtView['makeCam']>, viewH: number) {
@@ -1245,6 +1285,7 @@ export class CourtView {
       shorts: shade(this.colors[c.team][0], -40),
       num: c.num, handedness: c.handedness, isLibero: c.isLibero,
       name: c.name, anim: c.anim, animT: c.animT,
+      prevAnim: c.prevAnim, blend: c.blend,
       expression: exprFromState(c.expression, c.anim),
       facing: c.facing, starSig: null,
       showLabel: this.shouldShowLabel(c),
@@ -1289,6 +1330,21 @@ export class CourtView {
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(sx, sy, r * 1.8 * (1.2 - this.ball.bounceT), 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
+    }
+    // Soft contact impact flash
+    if (this.impactFlash && this.impactFlash.t > 0) {
+      const [ix, iy, isc] = cam.project(this.impactFlash.x, this.impactFlash.y, this.impactFlash.z);
+      const ir = Math.max(6, isc * 0.2);
+      const a = Math.min(1, this.impactFlash.t / 0.12) * Math.min(1, this.impactFlash.t * 4);
+      ctx.save();
+      ctx.globalAlpha = a * 0.85;
+      ctx.strokeStyle = '#fff8e7';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(ix, iy, ir * (1.2 - this.impactFlash.t), 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = a * 0.35;
+      ctx.fillStyle = '#ffe08a';
+      ctx.beginPath(); ctx.arc(ix, iy, ir * 0.55, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
   }
 }

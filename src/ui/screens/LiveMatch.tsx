@@ -4,7 +4,7 @@ import { MatchSim } from '../../engine/Match';
 import type { TeamConfig } from '../../engine/types';
 import { CourtView } from '../render/CourtView';
 import { PACE, type PacePreset } from '../render/Pace';
-import { sfxForEvent } from '../sound';
+import { sfxForEvent, sfxKind } from '../sound';
 import { OFF_TACTICS, DEF_TACTICS } from '../../engine/types';
 import { setTactics } from '../../engine/TacticalEngine';
 import { getPlayer } from '../../engine/db';
@@ -100,11 +100,18 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           setBench(s.st.teams[0].bench.slice());
         }
       }
-      // Commentary + SFX follow events as they are visually presented
+      // Contact-frame SFX (tight sync) + commentary from presentation
+      if (v.pendingSfx.length) {
+        for (const s of v.pendingSfx) sfxKind(s.kind, s.pan);
+        v.pendingSfx.length = 0;
+      }
       if (v.playedLog.length > playedIdx.current) {
         for (let i = playedIdx.current; i < v.playedLog.length; i++) {
           const pe = v.playedLog[i];
-          sfxForEvent(pe.type as Parameters<typeof sfxForEvent>[0], 0);
+          // Non-contact narrative SFX only (avoid double-hits)
+          if (['ace', 'point', 'rallyEnd', 'signature'].includes(pe.type)) {
+            sfxForEvent(pe.type as Parameters<typeof sfxForEvent>[0], 0);
+          }
         }
         playedIdx.current = v.playedLog.length;
         if (v.lastEvent) setCommentary(v.lastEvent);

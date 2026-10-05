@@ -402,4 +402,98 @@ test.describe('HSVL v4 full flow', () => {
     if (await sim.isVisible().catch(() => false)) await sim.click();
     expect(errors.filter((e) => !/AudioContext|NotAllowedError/i.test(e))).toEqual([]);
   });
+
+  test('v8 fluid contact flow screenshots + hand-ball sync', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.getByTestId('mode-quick').click();
+    await page.getByTestId('school-karasawa').click();
+    await page.getByTestId('btn-continue-school').click();
+    await page.getByTestId('btn-finish-team').click();
+    await page.getByTestId('opp-nekoma').click();
+    await page.getByTestId('btn-to-preview').click();
+    await page.getByTestId('btn-start-match').click();
+    await expect(page.getByTestId('live-match')).toBeVisible({ timeout: 20000 });
+    await page.getByTestId('speed-2').click();
+
+    await page.evaluate(() => {
+      const v = (window as unknown as { __hsvlView?: {
+        autoFreezeKinds: string[];
+        debugContacts: unknown[];
+      } }).__hsvlView;
+      if (v) {
+        v.autoFreezeKinds = ['spike', 'quickSpike', 'backAttack'];
+        v.debugContacts.length = 0;
+      }
+    });
+
+    const waitFrozen = async (pred: (kind: string) => boolean, tries = 100) => {
+      for (let i = 0; i < tries; i++) {
+        const hit = await page.evaluate(() => {
+          const v = (window as unknown as { __hsvlView?: {
+            holdFrozen: boolean;
+            frozenContact: { kind: string } | null;
+          } }).__hsvlView;
+          if (!v?.holdFrozen || !v.frozenContact) return null;
+          return v.frozenContact.kind;
+        });
+        if (hit && pred(hit)) return hit;
+        await page.waitForTimeout(180);
+      }
+      return null;
+    };
+
+    const spikeKind = await waitFrozen((k) => /spike|backAttack/i.test(k));
+    expect(spikeKind, 'expected frozen spike for v8-spike-flow').toBeTruthy();
+    await page.waitForTimeout(60);
+    await page.screenshot({ path: shot('v8-spike-flow.png') });
+
+    // Dig→set: freeze on set after allowing dig/receive
+    await page.evaluate(() => {
+      const v = (window as unknown as { __hsvlView?: { unfreeze: () => void; autoFreezeKinds: string[] } }).__hsvlView;
+      if (v) {
+        v.autoFreezeKinds = ['set', 'jumpSet'];
+        v.unfreeze();
+      }
+    });
+    const setKind = await waitFrozen((k) => k === 'set' || k === 'jumpSet', 120);
+    expect(setKind, 'expected frozen set for v8-dig-to-set').toBeTruthy();
+    await page.waitForTimeout(60);
+    await page.screenshot({ path: shot('v8-dig-to-set.png') });
+
+    await page.evaluate(() => {
+      const v = (window as unknown as { __hsvlView?: { unfreeze: () => void; autoFreezeKinds: string[] } }).__hsvlView;
+      if (v) {
+        v.autoFreezeKinds = ['block', 'eyeTrack'];
+        v.unfreeze();
+      }
+    });
+    const blockKind = await waitFrozen((k) => k === 'block' || k === 'eyeTrack', 120);
+    expect(blockKind, 'expected frozen block for v8-block-flow').toBeTruthy();
+    await page.waitForTimeout(60);
+    await page.screenshot({ path: shot('v8-block-flow.png') });
+
+    await page.evaluate(() => {
+      const v = (window as unknown as { __hsvlView?: { unfreeze: () => void; autoFreezeKinds: string[] } }).__hsvlView;
+      if (v) { v.autoFreezeKinds = []; v.unfreeze(); }
+    });
+
+    await page.waitForTimeout(2200);
+    const stats = await page.evaluate(() => {
+      const v = (window as unknown as { __hsvlView?: { debugContacts: { kind: string; dist: number }[] } }).__hsvlView;
+      if (!v) return { n: 0, max: 99, avg: 99, kinds: [] as string[] };
+      const cs = v.debugContacts || [];
+      const dists = cs.map((c) => c.dist);
+      return {
+        n: cs.length,
+        max: dists.length ? Math.max(...dists) : 99,
+        avg: dists.length ? dists.reduce((a, b) => a + b, 0) / dists.length : 99,
+        kinds: [...new Set(cs.map((c) => c.kind))],
+      };
+    });
+    expect(stats.n, `expected contact samples, kinds=${stats.kinds.join(',')}`).toBeGreaterThan(2);
+    expect(stats.max, `max hand-ball dist ${stats.max}`).toBeLessThan(1.25);
+    expect(stats.avg, `avg hand-ball dist ${stats.avg}`).toBeLessThan(0.85);
+  });
+
 });

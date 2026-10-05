@@ -23,6 +23,8 @@ export interface CharDraw {
   name: string;
   anim: Anim;
   animT: number;
+  prevAnim?: Anim;
+  blend?: number; // 0 = fully prev, 1 = fully current
   expression: Expr;
   facing: number; // 1 = right, -1 = left
   starSig?: string | null;
@@ -60,79 +62,148 @@ const BASE: Pose = {
   squat: 0, jump: 0,
 };
 
+function easeInOut(u: number): number {
+  const x = Math.max(0, Math.min(1, u));
+  return x * x * (3 - 2 * x);
+}
+
+function lerpPose(a: Pose, b: Pose, t: number): Pose {
+  const u = easeInOut(t);
+  const out = { ...BASE } as Pose;
+  for (const k of Object.keys(BASE) as (keyof Pose)[]) {
+    out[k] = a[k] + (b[k] - a[k]) * u;
+  }
+  return out;
+}
+
 function poseFor(anim: Anim, t: number, hand: 'R' | 'L'): Pose {
   const p = { ...BASE };
-  const u = Math.min(1, t);
+  const u = Math.min(1, Math.max(0, t));
   const swing = Math.sin(u * Math.PI);
+  // Phase helpers: windup 0-0.35, contact ~0.42, follow 0.55-1
+  const wind = Math.min(1, u / 0.35);
+  const follow = Math.max(0, (u - 0.45) / 0.55);
   switch (anim) {
-    case 'ready': case 'idle':
-      p.squat = 0.08; p.lThigh = 0.14; p.rThigh = -0.14;
-      p.lArm = 0.35; p.rArm = 0.35; p.torsoLean = 0.05;
-      break;
-    case 'run': case 'sideStep': case 'approach': {
-      const g = Math.sin(t * 14);
-      p.lThigh = g * 0.35; p.rThigh = -g * 0.35;
-      p.lShin = Math.max(0, g) * 0.2; p.rShin = Math.max(0, -g) * 0.2;
-      p.lArm = 0.2 - g * 0.3; p.rArm = 0.2 + g * 0.3;
-      p.torsoLean = 0.12; p.squat = 0.05;
-      if (anim === 'approach') { p.torsoLean = 0.2; p.squat = 0.1; }
+    case 'ready': case 'idle': {
+      const breathe = Math.sin(t * 3.2) * 0.02;
+      p.squat = 0.1 + breathe; p.lThigh = 0.16; p.rThigh = -0.16;
+      p.lArm = 0.32; p.rArm = 0.32; p.torsoLean = 0.06;
       break;
     }
-    case 'jump': case 'landing':
-      p.jump = anim === 'jump' ? swing * 1.2 : (1 - u) * 0.4;
-      p.lThigh = 0.2; p.rThigh = -0.15; p.squat = anim === 'landing' ? 0.25 : 0.05;
+    case 'run': case 'sideStep': case 'approach': {
+      const g = Math.sin(t * 12);
+      p.lThigh = g * 0.42; p.rThigh = -g * 0.42;
+      p.lShin = Math.max(0, g) * 0.28; p.rShin = Math.max(0, -g) * 0.28;
+      p.lArm = 0.15 - g * 0.38; p.rArm = 0.15 + g * 0.38;
+      p.torsoLean = anim === 'approach' ? 0.22 : 0.14;
+      p.squat = anim === 'approach' ? 0.14 + Math.max(0, -g) * 0.08 : 0.06;
+      break;
+    }
+    case 'jump':
+      p.jump = swing * 1.25;
+      p.lThigh = 0.18; p.rThigh = -0.12; p.squat = 0.04;
+      p.lArm = -0.2; p.rArm = -0.2;
+      break;
+    case 'landing':
+      p.jump = (1 - u) * 0.35;
+      p.squat = 0.18 + (1 - u) * 0.2;
+      p.lThigh = 0.28; p.rThigh = -0.22;
+      p.lArm = 0.35; p.rArm = 0.35;
       break;
     case 'spike': case 'quickSpike': case 'backAttack': {
-      p.jump = Math.sin(Math.min(1, t * 1.2) * Math.PI) * 1.35;
-      p.squat = 0.02; p.torsoLean = -0.15 + u * 0.35;
-      const armUp = -0.85 + swing * 1.1;
-      if (hand === 'R') { p.rArm = armUp; p.rFore = armUp + 0.15; p.lArm = 0.3; }
-      else { p.lArm = armUp; p.lFore = armUp + 0.15; p.rArm = 0.3; }
+      // Athletic: plant lean → bow draw → whip through contact → follow
+      p.jump = Math.sin(Math.min(1, u * 1.15) * Math.PI) * (anim === 'quickSpike' ? 1.2 : 1.4);
+      p.squat = 0.04 * (1 - wind);
+      p.torsoLean = -0.22 + easeInOut(u) * 0.5;
+      const bow = -1.05 + easeInOut(wind) * 0.15; // cocked
+      const whip = bow + easeInOut(Math.max(0, (u - 0.28) / 0.35)) * 1.55; // through ball
+      const arm = whip - follow * 0.25;
+      if (hand === 'R') {
+        p.rArm = arm; p.rFore = arm + 0.2 - follow * 0.15;
+        p.lArm = 0.15 + wind * 0.2; p.lFore = 0.35;
+      } else {
+        p.lArm = arm; p.lFore = arm + 0.2 - follow * 0.15;
+        p.rArm = 0.15 + wind * 0.2; p.rFore = 0.35;
+      }
+      p.lThigh = 0.12; p.rThigh = -0.2;
       break;
     }
     case 'tip': case 'dump':
-      p.jump = swing * 0.7; p.torsoLean = 0.1;
-      if (hand === 'R') { p.rArm = -0.35; p.rFore = -0.15; } else { p.lArm = -0.35; p.lFore = -0.15; }
+      p.jump = swing * 0.65; p.torsoLean = 0.08 + u * 0.1;
+      if (hand === 'R') { p.rArm = -0.45 + follow * 0.2; p.rFore = -0.2; p.lArm = 0.25; }
+      else { p.lArm = -0.45 + follow * 0.2; p.lFore = -0.2; p.rArm = 0.25; }
       break;
-    case 'block': case 'eyeTrack':
-      p.jump = Math.sin(Math.min(1, t * 1.3) * Math.PI) * 1.15;
-      p.lArm = -0.95; p.rArm = -0.95; p.lFore = -1.05; p.rFore = -1.05;
-      p.torsoLean = -0.05;
-      break;
-    case 'set': case 'jumpSet':
-      p.jump = anim === 'jumpSet' ? swing * 0.9 : 0.05;
-      p.lArm = -0.7; p.rArm = -0.7; p.lFore = -0.85; p.rFore = -0.85;
-      p.squat = 0.06;
-      break;
-    case 'receive':
-      p.squat = 0.28; p.torsoLean = 0.25; p.lThigh = 0.22; p.rThigh = -0.22;
-      p.lArm = 0.55; p.rArm = 0.55; p.lFore = 0.7; p.rFore = 0.7;
-      break;
-    case 'dig':
-      p.squat = 0.35; p.torsoLean = 0.3; p.lArm = 0.65; p.rArm = 0.65;
-      break;
-    case 'dive': case 'roll':
-      p.squat = 0.55; p.torsoLean = 0.55; p.hipY = 0.22;
-      p.lArm = 0.8; p.rArm = 0.8; p.jump = -0.15;
-      break;
-    case 'serve':
-      p.torsoLean = -0.1 + u * 0.3;
-      if (hand === 'R') { p.rArm = -0.7 + swing * 1.0; p.lArm = 0.4; }
-      else { p.lArm = -0.7 + swing * 1.0; p.rArm = 0.4; }
-      break;
-    case 'jumpServe': case 'jumpFloat':
-      p.jump = swing * 1.2; p.torsoLean = -0.2 + u * 0.4;
-      if (hand === 'R') { p.rArm = -0.9 + swing * 1.2; } else { p.lArm = -0.9 + swing * 1.2; }
-      break;
-    case 'celebrate':
-      p.lArm = -0.9; p.rArm = -0.9; p.jump = Math.abs(Math.sin(t * 8)) * 0.25;
+    case 'block': case 'eyeTrack': {
+      p.jump = Math.sin(Math.min(1, u * 1.25) * Math.PI) * 1.2;
+      // Hands reach UP and slightly over; land together
+      const reach = -0.88 - easeInOut(wind) * 0.28;
+      const settle = reach + follow * 0.35;
+      p.lArm = settle; p.rArm = settle;
+      p.lFore = settle - 0.12; p.rFore = settle - 0.12;
+      p.torsoLean = -0.08; p.squat = follow * 0.12;
       p.lThigh = 0.1; p.rThigh = -0.1;
       break;
+    }
+    case 'set': case 'jumpSet': {
+      p.jump = anim === 'jumpSet' ? swing * 0.55 : 0.02;
+      // Hands just above forehead — triangular window (not full sky reach)
+      const up = -0.55 - easeInOut(wind) * 0.18;
+      p.lArm = up; p.rArm = up;
+      p.lFore = up - 0.28; p.rFore = up - 0.28;
+      p.squat = 0.1; p.torsoLean = -0.06;
+      if (follow > 0) { p.lArm += follow * 0.12; p.rArm += follow * 0.12; }
+      break;
+    }
+    case 'receive': {
+      // Platform: flat forearms, athletic squat
+      p.squat = 0.22 + easeInOut(wind) * 0.12;
+      p.torsoLean = 0.18 + wind * 0.12;
+      p.lThigh = 0.24; p.rThigh = -0.24;
+      p.lArm = 0.48; p.rArm = 0.48;
+      p.lFore = 0.72; p.rFore = 0.72;
+      break;
+    }
+    case 'dig': {
+      p.squat = 0.3 + wind * 0.12; p.torsoLean = 0.28;
+      p.lArm = 0.58; p.rArm = 0.58; p.lFore = 0.78; p.rFore = 0.78;
+      p.lThigh = 0.26; p.rThigh = -0.26;
+      break;
+    }
+    case 'dive': {
+      p.squat = 0.5; p.torsoLean = 0.5 + wind * 0.15; p.hipY = 0.2;
+      p.lArm = 0.85; p.rArm = 0.75; p.jump = -0.12;
+      p.lThigh = 0.4; p.rThigh = 0.05;
+      break;
+    }
+    case 'roll': {
+      // Recovery roll after dive
+      p.squat = 0.45 - follow * 0.2; p.torsoLean = 0.4 - follow * 0.25;
+      p.hipY = 0.25 + follow * 0.12;
+      p.lArm = 0.5; p.rArm = 0.5; p.jump = -0.05 + follow * 0.08;
+      break;
+    }
+    case 'serve': {
+      p.torsoLean = -0.12 + u * 0.35;
+      p.squat = 0.08 + (1 - swing) * 0.06;
+      if (hand === 'R') { p.rArm = -0.85 + swing * 1.15; p.rFore = -0.5 + swing * 0.9; p.lArm = 0.45; }
+      else { p.lArm = -0.85 + swing * 1.15; p.lFore = -0.5 + swing * 0.9; p.rArm = 0.45; }
+      break;
+    }
+    case 'jumpServe': case 'jumpFloat':
+      p.jump = swing * 1.25; p.torsoLean = -0.22 + u * 0.45;
+      if (hand === 'R') { p.rArm = -1.0 + swing * 1.3; p.rFore = -0.6 + swing; }
+      else { p.lArm = -1.0 + swing * 1.3; p.lFore = -0.6 + swing; }
+      break;
+    case 'celebrate':
+      p.lArm = -0.95; p.rArm = -0.95;
+      p.jump = Math.abs(Math.sin(t * 7)) * 0.28;
+      p.lThigh = 0.12; p.rThigh = -0.12;
+      break;
     case 'frustrate':
-      p.torsoLean = 0.2; p.lArm = 0.5; p.rArm = 0.5; p.squat = 0.15;
+      p.torsoLean = 0.22; p.lArm = 0.48; p.rArm = 0.48; p.squat = 0.16;
       break;
     case 'timeout':
-      p.squat = 0.2; p.lArm = 0.2; p.rArm = 0.2;
+      p.squat = 0.18; p.lArm = 0.22; p.rArm = 0.22;
       break;
   }
   return p;
@@ -147,7 +218,11 @@ export function drawCharacter(
 ) {
   if (bodyH < 8) return;
   const sk = skin(c.skinTone);
-  const pose = poseFor(c.anim, c.animT, c.handedness);
+  const cur = poseFor(c.anim, c.animT, c.handedness);
+  const prev = c.prevAnim && (c.blend ?? 1) < 0.999
+    ? poseFor(c.prevAnim, Math.max(c.animT, 0.35), c.handedness)
+    : cur;
+  const pose = lerpPose(prev, cur, c.blend ?? 1);
   if (c.jumpBoost && c.jumpBoost > 0) pose.jump *= (0.75 + c.jumpBoost);
   const face = c.facing || 1;
   const build = 0.75 + c.build * 0.45;

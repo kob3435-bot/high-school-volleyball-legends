@@ -70,7 +70,7 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   if (set.attackType === 'tip' || set.attackType === 'setterDump') direction = 'tip';
   else if (set.attackType === 'cross' || hasSig(attacker.signatures, 'SUPER_INNER_CROSS') && st.rng.chance(0.5)) direction = 'cross';
   else if (set.attackType === 'line') direction = 'line';
-  else if (st.rng.chance(0.15 + effective(attacker, 'tip') * 0.001)) direction = 'tip';
+  else if (st.rng.chance(0.08 + effective(attacker, 'tip') * 0.0008)) direction = 'tip';
   else if (st.rng.chance(0.45)) direction = st.rng.chance(0.55) ? 'cross' : 'line';
 
   // vs tall block: more tips/tools
@@ -135,14 +135,14 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   }
 
   // Kill chance vs block
-  let killP = 0.09 + (power - 70) * 0.002 + (accuracy - 70) * 0.0016 + set.qualityScore * 0.10;
+  let killP = 0.098 + (power - 70) * 0.0020 + (accuracy - 70) * 0.0015 + set.qualityScore * 0.10;
   if (set.qualityScore >= 0.9) killP += 0.12;
   else if (set.qualityScore >= 0.75) killP += 0.06;
   else if (set.qualityScore < 0.45) killP -= 0.06;
   if (block) {
     killP -= block.blockers.length * (set.qualityScore >= 0.78 ? 0.05 : 0.09);
     killP -= block.strength * 0.0015;
-    if (block.soft) killP *= 0.22;
+    if (block.soft) killP *= 0.18;
   } else {
     killP += 0.15; // no block
   }

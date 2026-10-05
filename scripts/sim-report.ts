@@ -16,6 +16,7 @@ interface Agg {
   receptionPct: number[]; blocksPerSet: number[]; digsPerSet: number[];
   sideOut: number[]; deuces: number; comebacks: number;
   validationErrors: number; crashes: number;
+  rallyLens: number[];
 }
 
 const agg: Agg = {
@@ -23,6 +24,7 @@ const agg: Agg = {
   attackPct: [], acePct: [], serveErrPct: [], receptionPct: [],
   blocksPerSet: [], digsPerSet: [], sideOut: [],
   deuces: 0, comebacks: 0, validationErrors: 0, crashes: 0,
+  rallyLens: [],
 };
 
 const rng = new RNG(20261005);
@@ -36,6 +38,7 @@ for (let i = 0; i < N; i++) {
     a.isCPU = true; b.isCPU = true;
     const sim = new MatchSim(a, b, rng.int(1, 1e9), { bestOf: 5, keepEvents: false, userTeam: null });
     sim.simToEnd();
+    agg.rallyLens.push(...sim.st.rallyLengths);
     const r = sim.getResult();
     const errs = validateMatchStats(sim.st);
     if (errs.length) agg.validationErrors++;
@@ -160,5 +163,30 @@ try {
   console.log(`GlassStarPile vs Nekomo winRate=${wr.toFixed(2)} (stars favored ~0.65-0.85)`);
   console.log(`Nekomo vs GlassStarPile winRate=${wr2.toFixed(2)} (balanced can steal ~0.20+)`);
 } catch (e) { console.error('starPile fail', e); }
+
+
+// Rally length / touches distribution (from the 5k run)
+const allLens: number[] = agg.rallyLens;
+function bucket(n: number) {
+  if (n <= 2) return '1-2 short (ace/err/FBK)';
+  if (n <= 5) return '3-5 medium (1 transition)';
+  if (n <= 9) return '6-9 medium-long';
+  if (n <= 15) return '10-15 long';
+  return '16+ marathon';
+}
+const counts: Record<string, number> = {};
+for (const L of allLens) counts[bucket(L)] = (counts[bucket(L)] || 0) + 1;
+const order = ['1-2 short (ace/err/FBK)','3-5 medium (1 transition)','6-9 medium-long','10-15 long','16+ marathon'];
+console.log('\n--- Rally length distribution (contacts/touches) ---');
+const meanL = allLens.reduce((a,b)=>a+b,0)/Math.max(1,allLens.length);
+let maxL = 0; for (const x of allLens) if (x > maxL) maxL = x;
+console.log(`Rallies sampled: ${allLens.length}  mean=${meanL.toFixed(2)}  max=${maxL}`);
+for (const k of order) {
+  const c = counts[k] || 0;
+  const pct = (100 * c / allLens.length).toFixed(1);
+  console.log(`  ${k}: ${c} (${pct}%)`);
+}
+writeFileSync('reports/v6-rally-lengths.json', JSON.stringify({ n: allLens.length, mean: meanL, max: maxL, counts, sample: allLens.slice(0, 50) }, null, 2));
+
 
 console.log('\nDone.');

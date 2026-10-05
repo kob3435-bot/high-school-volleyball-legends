@@ -154,7 +154,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     touch: false, stuff: false, tool: false, soft: false, out: false, funnel: false, strength,
   };
 
-  let stuffChance = clamp(0.22 + diff * 0.010, 0.16, 0.52);
+  let stuffChance = clamp(0.18 + diff * 0.009, 0.12, 0.45);
   if (blockers.some((b) => hasSig(b.signatures, 'IRON_WALL') || hasSig(b.signatures, 'IMMOVABLE_BLOCK'))) stuffChance += 0.10;
   if (blockers.some((b) => hasSig(b.signatures, 'GUESS_MONSTER')) && style === 'guess') stuffChance += 0.08;
   if (diff > 4 && st.rng.chance(stuffChance)) {
@@ -170,7 +170,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     return result;
   }
 
-  if (diff > -5 && diff <= 8 && st.rng.chance(0.40)) {
+  if (diff > -6 && diff <= 9 && st.rng.chance(0.46)) {
     result.touch = true;
     // soft block or funnel
     if (blockers.some((b) => hasSig(b.signatures, 'FUNNEL_BLOCK'))) {

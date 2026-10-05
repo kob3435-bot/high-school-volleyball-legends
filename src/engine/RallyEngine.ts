@@ -96,10 +96,21 @@ export function runRally(st: MatchState): RallyOutcome {
 
     if (!dig.success) return finish(st, offense, 'digError', servingAtStart);
 
-    emit(st, { type: 'transition', team: defense, player: dig.diggerId, quality: dig.quality });
-    emit(st, { type: 'cover', team: defense });
+    const digger = st.teams[defense].players[dig.diggerId];
+    const digName = digger?.name?.split(' ').pop() ?? 'Libero';
+    emit(st, {
+      type: 'transition', team: defense, player: dig.diggerId, quality: dig.quality,
+      text: dig.miracle
+        ? `${digName} keeps it alive — counter!`
+        : block.soft
+          ? `Soft block… ${digName} transitions!`
+          : `${digName} digs — transition!`,
+    });
+    // Cover: offense side scrambles under possible tip rebound
+    emit(st, { type: 'cover', team: offense, text: 'Cover!' });
     offense = defense;
-    passQuality = dig.quality;
+    // Soft-block digs leave a playable but out-of-system ball; miracle digs are scramble
+    passQuality = dig.miracle ? Math.max(0.35, dig.quality) : (block.soft ? Math.max(0.42, dig.quality) : dig.quality);
 
     if (st.rng.chance(0.008)) {
       emit(st, { type: 'netTouch', team: offense });
@@ -115,6 +126,7 @@ function finish(st: MatchState, winner: 0 | 1, reason: PointReason, servingAtSta
   t.stats.points++;
   st.pointInSet++;
   st.longestRally = Math.max(st.longestRally, st.currentRallyLength);
+  st.rallyLengths.push(st.currentRallyLength);
 
   const receivingAtStart = (1 - servingAtStart) as 0 | 1;
   st.teams[receivingAtStart].stats.sideOutChances++;

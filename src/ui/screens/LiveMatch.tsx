@@ -33,6 +33,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   const [bench, setBench] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const accum = useRef(0);
+  const playedIdx = useRef(0);
   const last = useRef(0);
   const pausedRef = useRef(false);
   const speedRef = useRef(speed);
@@ -68,20 +69,18 @@ export function LiveMatch({ team, opponent, mode, seed }: {
       const v = viewRef.current!;
       const s = simRef.current!;
 
-      if (!pausedRef.current && !s.finished && !v.replay && !v.holdFrozen) {
+      // Advance sim only when the view finished the previous rally (full point playback)
+      if (!pausedRef.current && !s.finished && !v.replay && !v.holdFrozen && v.isIdle()) {
         accum.current += dt * speedRef.current;
-        const interval = 0.9 / Math.max(1, speedRef.current * 0.55);
-        while (accum.current >= interval && !s.finished && !v.replay && !v.holdFrozen) {
-          accum.current -= interval;
+        // Pace between rallies scales mildly with speed; contacts are paced inside CourtView
+        const interval = 0.35 / Math.max(1, speedRef.current * 0.85);
+        if (accum.current >= interval) {
+          accum.current = 0;
           const evs = s.step();
           v.setLineups([s.st.teams[0].rotation.slice(), s.st.teams[1].rotation.slice()]);
           v.serving = s.st.serving;
           v.apply(evs);
           for (const e of evs) {
-            // Signature callouts are drawn on-court only (avoid triplicated banners)
-            if (e.text && e.type !== 'signature') setCommentary(e.text);
-            else if (e.type === 'signature' && e.kind) setCommentary((e.kind || '').replace(/_/g, ' '));
-            sfxForEvent(e.type, e.team);
             if (e.type === 'timeout') { setHuddleUI(true); setPaused(true); }
           }
           setScore([s.st.teams[0].score, s.st.teams[1].score]);
@@ -91,6 +90,15 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           setRotation(s.st.teams[0].rotation.slice());
           setBench(s.st.teams[0].bench.slice());
         }
+      }
+      // Commentary + SFX follow events as they are visually presented
+      if (v.playedLog.length > playedIdx.current) {
+        for (let i = playedIdx.current; i < v.playedLog.length; i++) {
+          const pe = v.playedLog[i];
+          sfxForEvent(pe.type as Parameters<typeof sfxForEvent>[0], 0);
+        }
+        playedIdx.current = v.playedLog.length;
+        if (v.lastEvent) setCommentary(v.lastEvent);
       }
 
       const parent = canvas.parentElement!;
@@ -113,8 +121,13 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   const skipRally = () => {
     const s = simRef.current, v = viewRef.current;
     if (!s || s.finished) return;
+    // Finish current visual rally instantly, then sim next point under the hood
+    if (v && !v.isIdle()) {
+      v.applyInstant([]);
+    }
     const evs = s.step();
-    v?.apply(evs);
+    v?.applyInstant(evs);
+    playedIdx.current = v?.playedLog.length ?? 0;
     setScore([s.st.teams[0].score, s.st.teams[1].score]);
     setSets([...s.st.setsWon] as [number, number]);
     setRotation(s.st.teams[0].rotation.slice());
@@ -123,7 +136,9 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   };
   const skipSet = () => {
     const s = simRef.current;
+    const v = viewRef.current;
     if (!s || s.finished) return;
+    v?.applyInstant([]);
     s.skipSet();
     setScore([s.st.teams[0].score, s.st.teams[1].score]);
     setSets([...s.st.setsWon] as [number, number]);

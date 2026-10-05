@@ -52,11 +52,11 @@ export function executeDig(st: MatchState, defIdx: 0 | 1, atk: AttackResult, blo
     + mom;
 
   if (hasSig(digger.signatures, 'GUARDIAN_DEITY')) skill += 10;
-  if (block?.soft || block?.funnel) skill += 8;
+  if (block?.soft || block?.funnel) skill += 10;
   if (atk.direction === 'tip') skill += 8;
   if (atk.direction === 'tool') skill -= 5;
 
-  const pressure = atk.power * 0.72 + (100 - atk.accuracy) * 0.08 + st.rng.gauss(0, 12);
+  const pressure = atk.power * 0.66 + (100 - atk.accuracy) * 0.07 + st.rng.gauss(0, 11);
   const roll = skill - pressure;
 
   drainStamina(digger, 2);
@@ -71,8 +71,17 @@ export function executeDig(st: MatchState, defIdx: 0 | 1, atk: AttackResult, blo
     return { diggerId, success: true, quality: 0.45, miracle: true };
   }
 
-  if (roll >= 18) {
-    const quality = clamp(0.28 + roll * 0.007, 0.18, 0.62);
+  if (roll >= 13) {
+    const quality = clamp(0.30 + roll * 0.007, 0.20, 0.66);
+    def.pstats[digger.id].digs++;
+    def.stats.digs++;
+    emit(st, { type: 'dig', team: defIdx, player: digger.id, success: true, quality });
+    return { diggerId, success: true, quality, miracle: false };
+  }
+
+  // Scramble dig — keeps rally alive with poor pass
+  if (roll >= -3 && (block?.soft || atk.direction === 'tip' || st.rng.chance(0.18))) {
+    const quality = clamp(0.22 + (roll + 8) * 0.01, 0.18, 0.40);
     def.pstats[digger.id].digs++;
     def.stats.digs++;
     emit(st, { type: 'dig', team: defIdx, player: digger.id, success: true, quality });

@@ -26,6 +26,8 @@ export interface MatchState {
   momentumSide: 0 | 1 | null;
   longestRally: number;
   currentRallyLength: number;
+  /** Contacts (touches) per finished rally */
+  rallyLengths: number[];
   lastPointWinner: 0 | 1 | null;
   consecutivePoints: [number, number];
   userTeam: 0 | 1 | null;
@@ -77,6 +79,7 @@ export function createMatch(a: TeamConfig, b: TeamConfig, seed: number, opts: Cr
     momentumSide: null,
     longestRally: 0,
     currentRallyLength: 0,
+    rallyLengths: [],
     lastPointWinner: null,
     consecutivePoints: [0, 0],
     userTeam: opts.userTeam ?? null,

@@ -1,0 +1,27 @@
+{
+  "matches": 5000,
+  "crashes": 0,
+  "validationErrors": 0,
+  "attackPct": 0.321,
+  "acePct": 4.8,
+  "serveErrPct": 8.0,
+  "receptionPct": 93.7,
+  "recvErrPct": 6.3,
+  "blocksPerSet": 1.66,
+  "digsPerSet": 11.49,
+  "sideOutPct": 61.9,
+  "starPileWinRate": 0.81,
+  "nekomaUpsetRate": 0.12,
+  "rally": {
+    "n": 789652,
+    "mean": 6.7274419617755665,
+    "max": 42,
+    "counts": {
+      "1-2 short (ace/err/FBK)": 109604,
+      "3-5 medium (1 transition)": 331208,
+      "16+ marathon": 38091,
+      "10-15 long": 95018,
+      "6-9 medium-long": 215731
+    }
+  }
+}

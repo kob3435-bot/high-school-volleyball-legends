@@ -66,6 +66,15 @@ export class CourtView {
   autoFreezeKinds: string[] = [];
   holdFrozen = false;
   frozenContact: { kind: string; playerId: string; t: number } | null = null;
+  /** Sequential rally playback — Simulation events drain one-at-a-time */
+  eventQueue: SimEvent[] = [];
+  busyUntil = 0;
+  betweenPointHold = 0;
+  /** Contacts played in current rally (for crowd + e2e) */
+  rallyTouches = 0;
+  /** Ordered contact log for Playwright */
+  playedLog: { type: string; kind?: string; t: number }[] = [];
+  private skipPlayback = false;
   private pendingOutbound: { from: Vec3; to: Vec3; spin: Spin; delay: number } | null = null;
   colors: [[string, string], [string, string]];
   score: [number, number] = [0, 0];
@@ -136,21 +145,89 @@ export class CourtView {
     for (const id of [...this.chars.keys()]) if (!keep.has(id)) this.chars.delete(id);
   }
 
+  /** Enqueue rally events for sequential visual playback (or flush instantly if skip). */
   apply(events: SimEvent[]) {
-    for (const e of events) {
-      this.handleEvent(e);
-      if (this.isImportant(e)) this.importantBuf.push(e);
+    if (!events.length) return;
+    if (this.skipPlayback) {
+      for (const e of events) this.playEventNow(e);
+      this.skipPlayback = false;
+      return;
     }
-    // Trigger replay after big point
-    const big = events.find((e) => e.type === 'kill' || e.type === 'ace' || e.type === 'blockPoint' || e.type === 'signature');
-    if (big && this.replayMode !== 'off' && !this.replay) {
-      const want = this.replayMode === 'on' || (this.replayMode === 'important' && this.isImportant(big));
-      if (want && this.importantBuf.length >= 2) {
-        this.startReplay(this.importantBuf.slice(-8), big.text || big.type);
-        this.importantBuf = [];
+    this.eventQueue.push(...events);
+  }
+
+  /** Skip Rally/Set: apply remaining + new events with no pacing delay. */
+  applyInstant(events: SimEvent[]) {
+    while (this.eventQueue.length) this.playEventNow(this.eventQueue.shift()!);
+    this.betweenPointHold = 0;
+    this.busyUntil = this.time;
+    for (const e of events) this.playEventNow(e);
+  }
+
+  /** True when live loop may step the next rally. */
+  isIdle(): boolean {
+    if (this.holdFrozen || this.replay) return false;
+    if (this.betweenPointHold > 0) return false;
+    if (this.eventQueue.length > 0) return false;
+    if (this.time < this.busyUntil - 0.02) return false;
+    return true;
+  }
+
+  private playEventNow(e: SimEvent) {
+    this.handleEvent(e);
+    if (this.isImportant(e)) this.importantBuf.push(e);
+    // Track played contacts for e2e / commentary pacing
+    const contactish = ['serve','receive','set','attack','kill','block','softBlock','dig','ace','blockPoint','setterDump','transition','cover'];
+    if (contactish.includes(e.type)) {
+      this.playedLog.push({ type: e.type, kind: e.kind, t: this.time });
+      if (this.playedLog.length > 120) this.playedLog.shift();
+      if (e.type !== 'transition' && e.type !== 'cover') this.rallyTouches++;
+    }
+    if (e.type === 'rallyStart') {
+      this.importantBuf = [];
+      this.rallyTouches = 0;
+      this.crowd = Math.max(0.25, this.crowd * 0.7);
+    }
+    if (e.type === 'point') {
+      this.busyUntil = Math.max(this.busyUntil, this.time + 0.4);
+      if (this.replayMode !== 'off' && !this.replay && this.importantBuf.length >= 2) {
+        const want = this.replayMode === 'on' || this.replayMode === 'important';
+        if (want) {
+          this.startReplay(this.importantBuf.slice(-8), e.text || e.type);
+          this.importantBuf = [];
+        }
       }
     }
-    if (events.some((e) => e.type === 'rallyStart')) this.importantBuf = [];
+    if (e.type === 'rallyEnd') {
+      // Celebrate / whistle / score beat before next serve
+      this.betweenPointHold = 0.7 + Math.min(0.35, this.rallyTouches * 0.025);
+      this.busyUntil = Math.max(this.busyUntil, this.time + 0.45);
+    }
+    // Pace until ball/players finish this contact beat
+    this.busyUntil = Math.max(this.busyUntil, this.time + this.eventBeat(e));
+    // Long rallies lift the crowd
+    if (this.rallyTouches >= 8) this.crowd = Math.min(1, 0.45 + this.rallyTouches * 0.04);
+  }
+
+  private eventBeat(e: SimEvent): number {
+    switch (e.type) {
+      case 'serve': return 1.05;
+      case 'receive': return 0.72;
+      case 'set': return 0.88;
+      case 'attack': return 0.70;
+      case 'kill': return 0.85;
+      case 'block': case 'softBlock': return 0.55;
+      case 'blockPoint': return 0.9;
+      case 'dig': return 0.78;
+      case 'transition': return 0.35;
+      case 'cover': return 0.25;
+      case 'ace': return 1.0;
+      case 'setterDump': return 0.75;
+      case 'signature': return 0.45;
+      case 'rallyEnd': case 'point': return 0.55;
+      case 'rallyStart': return 0.2;
+      default: return 0.15;
+    }
   }
 
   showHuddle(on: boolean) {
@@ -494,6 +571,14 @@ export class CourtView {
 
     // Replay playback
     let d = dt;
+    if (this.betweenPointHold > 0) {
+      this.betweenPointHold = Math.max(0, this.betweenPointHold - d);
+    }
+    // Drain one queued event when the previous beat finished (hold only gates next rally step)
+    if (!this.replay && this.eventQueue.length && this.time >= this.busyUntil - 1e-4) {
+      const next = this.eventQueue.shift()!;
+      this.playEventNow(next);
+    }
     if (this.replay) {
       d = dt * 0.4;
       this.replay.t += dt;

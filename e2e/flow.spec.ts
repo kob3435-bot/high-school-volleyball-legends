@@ -496,4 +496,73 @@ test.describe('HSVL v4 full flow', () => {
     expect(stats.avg, `avg hand-ball dist ${stats.avg}`).toBeLessThan(0.85);
   });
 
+
+  test('v9 full court framing + ball flow', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.getByTestId('mode-quick').click();
+    await page.getByTestId('school-karasawa').click();
+    await page.getByTestId('btn-continue-school').click();
+    await page.getByTestId('btn-finish-team').click();
+    await page.getByTestId('opp-nekoma').click();
+    await page.getByTestId('btn-to-preview').click();
+    await page.getByTestId('btn-start-match').click();
+    await expect(page.getByTestId('live-match')).toBeVisible({ timeout: 20000 });
+    await page.getByTestId('speed-1').click();
+
+    // Wait until 12 chars exist and a rally is underway
+    for (let i = 0; i < 40; i++) {
+      const n = await page.evaluate(() => {
+        const v = (window as unknown as { __hsvlView?: { chars: Map<string, unknown> } }).__hsvlView;
+        return v?.chars?.size ?? 0;
+      });
+      if (n >= 12) break;
+      await page.waitForTimeout(150);
+    }
+
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: shot('v9-full-court.png') });
+
+    const bounds = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      const v = (window as unknown as { __hsvlView?: {
+        debugPlayerScreens: (w: number, h: number) => { id: string; top: number; bottom: number; left: number; right: number }[];
+        chars: Map<string, unknown>;
+      } }).__hsvlView;
+      if (!canvas || !v?.debugPlayerScreens) return { ok: false, n: 0, offenders: [] as string[], w: 0, h: 0 };
+      const w = canvas.width || canvas.clientWidth;
+      const h = canvas.height || canvas.clientHeight;
+      const pad = 4;
+      const screens = v.debugPlayerScreens(w, h);
+      const offenders = screens.filter((p) =>
+        p.top < -pad || p.bottom > h + pad || p.left < -pad || p.right > w + pad
+      ).map((p) => `${p.id}:t=${p.top.toFixed(0)},b=${p.bottom.toFixed(0)},l=${p.left.toFixed(0)},r=${p.right.toFixed(0)}`);
+      return { ok: offenders.length === 0, n: screens.length, offenders, w, h };
+    });
+    expect(bounds.n, 'expected 12 on-court players').toBeGreaterThanOrEqual(12);
+    expect(bounds.ok, `players outside canvas: ${bounds.offenders.join(' | ')}`).toBeTruthy();
+
+    // Mid continuous arc: wait for ball in flight with z above floor
+    let gotArc = false;
+    for (let i = 0; i < 80; i++) {
+      const flying = await page.evaluate(() => {
+        const v = (window as unknown as { __hsvlView?: {
+          ball: { flight: { t: number; dur: number } | null; z: number };
+          eventQueue: unknown[];
+        } }).__hsvlView;
+        if (!v?.ball?.flight) return false;
+        const f = v.ball.flight;
+        return f.t > 0.08 && f.t < f.dur - 0.08 && v.ball.z > 0.6;
+      });
+      if (flying) {
+        await page.screenshot({ path: shot('v9-ball-flow.png') });
+        gotArc = true;
+        break;
+      }
+      await page.waitForTimeout(120);
+    }
+    if (!gotArc) await page.screenshot({ path: shot('v9-ball-flow.png') });
+    expect(gotArc, 'expected mid-flight ball arc for continuity shot').toBeTruthy();
+  });
+
 });

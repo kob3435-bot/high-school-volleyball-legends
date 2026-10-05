@@ -88,7 +88,9 @@ export class CourtView {
   impactFlash: { x: number; y: number; z: number; t: number } | null = null;
   /** SFX queued at true contact frames for LiveMatch */
   pendingSfx: { kind: string; pan: number }[] = [];
-  private pendingOutbound: { from: Vec3; to: Vec3; spin: Spin; delay: number } | null = null;
+  private pendingOutbound: { to: Vec3; spin: Spin } | null = null;
+  /** Seconds until next in-rally event may start (contact-timed). */
+  private contactBusyHint = 0;
   colors: [[string, string], [string, string]];
   score: [number, number] = [0, 0];
   sets: [number, number] = [0, 0];
@@ -114,7 +116,7 @@ export class CourtView {
   replayMode: 'on' | 'important' | 'off' = 'important';
   private time = 0;
   private playT = 0;
-  private cam: CamState = { mode: 'courtside', focusX: 9, focusY: 3.5, zoom: 1.05, tfx: 9, tfy: 3.5, tzoom: 1.05, timer: 0 };
+  private cam: CamState = { mode: 'courtside', focusX: 9, focusY: 3.5, zoom: 0.84, tfx: 9, tfy: 3.5, tzoom: 0.84, timer: 0 };
   private importantBuf: SimEvent[] = [];
   private mobile = false;
 
@@ -255,12 +257,17 @@ export class CourtView {
   }
 
   private eventBeat(e: SimEvent): number {
-    let b = beatFor(e.type, this.paceScale);
-    // Overlap follow-through with next beat — keeps rally feeling continuous (not a slideshow)
-    if (!['rallyEnd', 'point', 'rallyStart', 'setEnd', 'setStart', 'ace', 'timeout'].includes(e.type)) {
-      b *= 0.72;
+    // Between-point / set ritual — keep watch pacing
+    if (['rallyEnd', 'point', 'rallyStart', 'setEnd', 'setStart', 'ace', 'timeout'].includes(e.type)) {
+      return beatFor(e.type, this.paceScale);
     }
-    return b;
+    // In-rally: advance at contact so next touch chains without a hang
+    if (this.contactBusyHint > 0) {
+      const h = this.contactBusyHint;
+      this.contactBusyHint = 0;
+      return Math.max(0.12, h);
+    }
+    return beatFor(e.type, this.paceScale) * 0.36;
   }
 
   setPace(preset: PacePreset) {
@@ -296,7 +303,7 @@ export class CourtView {
 
   private startReplay(evs: SimEvent[], label: string) {
     this.replay = { events: evs, i: 0, t: 0, label };
-    this.setCam('replay', this.ball.x, Math.min(5, this.ball.y), 1.28, 2.0);
+    this.setCam('replay', 9, 3.5, 0.84, 2.0);
   }
 
   private handleEvent(e: SimEvent) {
@@ -319,7 +326,7 @@ export class CourtView {
       }
       const matchPoint = Math.max(this.score[0], this.score[1]) >= 24 || (this.setNumber >= 5 && Math.max(this.score[0], this.score[1]) >= 14);
       if (matchPoint) { this.crowd = 1; this.benchEnergy = 1; this.flash = { text: Math.max(this.score[0], this.score[1]) >= (this.setNumber >= 5 ? 14 : 24) && Math.abs(this.score[0]-this.score[1]) >= 1 ? 'SET POINT' : 'CLOSE!', t: 1.4 * this.paceScale, color: '#ff6b6b' }; }
-      this.setCam('closeup', this.ball.x, Math.min(5, this.ball.y), 1.25, 1.2);
+      this.setCam('closeup', 9, 3.5, 0.84, 1.2);
     }
     if (e.type === 'serveError' || e.type === 'attackError' || e.type === 'receiveError') {
       if (e.player) {
@@ -347,7 +354,7 @@ export class CourtView {
       } else {
         this.burst = { x: this.ball.x, y: this.ball.y, text: short, t: 1.2 };
       }
-      this.setCam('net', 9, Math.min(5, this.ball.y), 1.15, 1.0);
+      this.setCam('net', 9, 3.5, 0.84, 1.0);
     }
 
     this.animateFromEvent(e);
@@ -398,6 +405,8 @@ export class CourtView {
     });
     if (this.debugContacts.length > 80) this.debugContacts.shift();
     this.impactFlash = { x: hand.x, y: hand.y, z: hand.z, t: 0.28 };
+    // Ball continues from exact contact — no hang / no teleport from stale from
+    this.fireOutboundFromContact();
     const pan = c.team === 0 ? -0.35 : 0.35;
     const sfxKind = /spike|Spike|backAttack|kill|tip|dump/.test(kind) ? 'spike'
       : kind === 'block' || kind === 'eyeTrack' ? 'block'
@@ -418,14 +427,48 @@ export class CourtView {
     this.frozenContact = null;
   }
 
-  /** Launch physics flight; returns duration. */
+  /** Launch physics flight from current ball pose; returns duration. */
   private launchBall(to: Vec3, spin: Spin, dur?: number): number {
     const from = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
     const f = makeFlight(from, to, spin, dur);
     this.ball.flight = f;
     this.ball.spin = spin;
-    this.ball.trail = [{ ...from }];
+    if (spin === 'spike') this.ball.trail = [{ ...from }];
+    else this.ball.trail = [];
     return f.dur;
+  }
+
+  /** Meet inbound ball without restarting a live arc — retarget or short launch. */
+  private meetBall(actor: Char, kind: Anim, hand: Vec3, preferDur: number): number {
+    actor.tx = hand.x - handOffset(kind, actor.facing, actor.team).dx;
+    actor.ty = hand.y;
+    if (this.ball.flight && this.ball.flight.t < this.ball.flight.dur - 0.04) {
+      const rem = Math.max(0.1, this.ball.flight.dur - this.ball.flight.t);
+      // Continuity: keep current position as p0 sample — retarget end only
+      const cur = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
+      const spin = this.ball.flight.spin;
+      const arrive = Math.min(preferDur * 1.15, Math.max(0.14, rem * 0.92));
+      this.ball.flight = makeFlight(cur, hand, spin === 'spike' ? 'none' : spin, arrive);
+      this.ball.spin = this.ball.flight.spin;
+      this.cueContact(actor, kind, this.time + arrive, hand.z);
+      return arrive;
+    }
+    const arrive = preferDur;
+    this.launchBall(hand, 'none', arrive);
+    this.cueContact(actor, kind, this.time + arrive, hand.z);
+    return arrive;
+  }
+
+  private scheduleOutbound(to: Vec3, spin: Spin) {
+    this.pendingOutbound = { to, spin };
+  }
+
+  /** Fire outbound from exact live contact pose (no teleport / no hang). */
+  private fireOutboundFromContact() {
+    if (!this.pendingOutbound) return;
+    const o = this.pendingOutbound;
+    this.pendingOutbound = null;
+    this.launchBall(o.to, o.spin);
   }
 
   private animateFromEvent(e: SimEvent) {
@@ -453,10 +496,9 @@ export class CourtView {
           toRecv.tx = hand.x - handOffset('receive', toRecv.facing, toRecv.team).dx;
           toRecv.ty = hand.y;
           const spin: Spin = (e.kind === 'float' || e.kind === 'jumpFloat') ? 'float' : 'serve';
-          // Ball flies toward receiver platform; receive event will cue the pass contact
-          this.pendingOutbound = { from: this.handWorld(actor, kind, z), to: hand, spin, delay: contactIn + 0.03 };
+          this.scheduleOutbound(hand, spin);
         }
-        this.setCam('behindServe', actor.x, Math.min(4, actor.y), 1.2, 1.4);
+        this.contactBusyHint = contactIn + 0.04;
         break;
       }
       case 'receive': case 'dig': {
@@ -465,20 +507,13 @@ export class CourtView {
         const kind: Anim = dive ? 'dive' : (e.type === 'dig' ? 'dig' : 'receive');
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
         const hand = this.handWorld(actor, kind, z);
-        // Intercept: move under current ball projection
-        actor.tx = this.ball.x - handOffset(kind, actor.facing, actor.team).dx;
-        actor.ty = this.ball.y;
-        const arrive = 0.48 * this.paceScale;
-        this.launchBall(hand, 'none', arrive);
-        this.cueContact(actor, kind, now + arrive, z);
-        // Outbound toward setter area after contact
+        // Prefer meeting live serve/pass arc
+        hand.x = this.ball.flight ? this.ball.flight.p1.x : hand.x;
+        hand.y = this.ball.flight ? this.ball.flight.p1.y : this.ball.y;
+        const arrive = this.meetBall(actor, kind, { ...hand, z }, 0.42 * this.paceScale);
         const midX = actor.team === 0 ? 7.0 : 11.0;
-        this.pendingOutbound = {
-          from: hand,
-          to: { x: midX, y: 3.2 + Math.random() * 2.5, z: 2.55 },
-          spin: 'none',
-          delay: arrive + 0.03,
-        };
+        this.scheduleOutbound({ x: midX, y: 3.2 + Math.random() * 2.5, z: 2.55 }, 'none');
+        this.contactBusyHint = arrive + 0.03;
         break;
       }
       case 'set': {
@@ -486,29 +521,19 @@ export class CourtView {
         const kind: Anim = 'jumpSet';
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
         const hand = this.handWorld(actor, kind, z);
-        actor.tx = this.ball.x; actor.ty = this.ball.y;
-        const arrive = 0.55 * this.paceScale;
-        this.launchBall(hand, 'none', arrive);
-        this.cueContact(actor, kind, now + arrive, z);
+        hand.x = this.ball.flight ? this.ball.flight.p1.x : this.ball.x;
+        hand.y = this.ball.flight ? this.ball.flight.p1.y : this.ball.y;
+        const arrive = this.meetBall(actor, kind, { ...hand, z }, 0.48 * this.paceScale);
         if (target) {
           const atkKind: Anim = e.kind?.startsWith('quick') ? 'quickSpike' : 'spike';
           const az = contactHeight(atkKind, target.heightCm, target.jumpAttr);
-          const aHand = this.handWorld(target, atkKind, az);
-          // Approach near net
           const netSide = target.team === 0 ? Math.min(target.x + 0.6, 8.4) : Math.max(target.x - 0.6, 9.6);
+          const aHand = { x: netSide + (target.team === 0 ? 0.2 : -0.2), y: target.y, z: az };
           target.tx = netSide; target.ty = aHand.y;
           this.setAnim(target, 'approach');
-          const setDur = 0.62 * this.paceScale;
-          this.pendingOutbound = {
-            from: hand,
-            to: aHand,
-            spin: 'none',
-            delay: arrive,
-          };
-          // Override pending with setDur after contact — handled below via second schedule
-          const hitAt = now + arrive + setDur;
-          this.cueContact(target, atkKind, hitAt, az);
-          // Move opposing front-row toward net for impending block (timed on block event)
+          const setDur = 0.55 * this.paceScale;
+          this.scheduleOutbound(aHand, 'none');
+          this.cueContact(target, atkKind, now + arrive + setDur, az);
           for (const b of this.chars.values()) {
             if (b.team === target.team) continue;
             if (b.y < 5.5 && Math.abs((b.tx || b.x) - 9) < 5) {
@@ -516,8 +541,8 @@ export class CourtView {
               b.ty = target.ty;
             }
           }
-          this.setCam(e.kind?.startsWith('quick') ? 'net' : 'courtside', netSide, Math.min(5, target.y), 1.2, 1.0);
         }
+        this.contactBusyHint = arrive + 0.03;
         break;
       }
       case 'attack': case 'kill': {
@@ -526,92 +551,63 @@ export class CourtView {
           : e.kind === 'tip' ? 'tip'
           : e.kind === 'backAttack' || e.kind === 'pipe' ? 'backAttack' : 'spike';
         const z = contactHeight(kind, actor.heightCm, actor.jumpAttr);
-        const hand = this.handWorld(actor, kind, z);
-        actor.tx = hand.x - handOffset(kind, actor.facing, actor.team).dx;
-        actor.ty = hand.y;
-        const arrive = 0.42 * this.paceScale;
-        this.launchBall(hand, 'none', arrive);
-        this.cueContact(actor, kind, now + arrive, z);
+        let hand = this.handWorld(actor, kind, z);
+        if (this.ball.flight) {
+          hand = { x: this.ball.flight.p1.x, y: this.ball.flight.p1.y, z };
+        }
+        const arrive = this.meetBall(actor, kind, hand, 0.38 * this.paceScale);
         const landX = actor.team === 0 ? 11 + Math.random() * 5 : 2 + Math.random() * 5;
         const landY = 1.2 + Math.random() * 6.5;
         const spin: Spin = kind === 'tip' ? 'none' : 'spike';
-        this.pendingOutbound = {
-          from: hand,
-          to: { x: landX, y: landY, z: 0.15 },
-          spin,
-          delay: arrive,
-        };
-        this.shake = 0.3;
-        this.setCam('net', 9, Math.min(5, actor.y), 1.28, 0.75);
+        this.scheduleOutbound({ x: landX, y: landY, z: 0.15 }, spin);
+        this.shake = 0.22;
+        this.contactBusyHint = arrive + 0.05;
         break;
       }
       case 'block': case 'blockPoint': case 'softBlock': {
         if (!actor) break;
         const z = contactHeight('block', actor.heightCm, actor.jumpAttr);
-        const hand = this.handWorld(actor, 'block', z);
+        let hand = this.handWorld(actor, 'block', z);
         actor.tx = 9 + (actor.team === 0 ? -0.35 : 0.35);
         actor.ty = this.ball.y;
-        const arrive = 0.32 * this.paceScale;
-        this.launchBall(hand, 'spike', arrive);
-        this.cueContact(actor, 'block', now + arrive, z);
+        if (this.ball.flight) {
+          hand = { x: this.ball.flight.p1.x, y: this.ball.flight.p1.y, z };
+        } else {
+          hand = { x: actor.tx + (actor.team === 0 ? 0.35 : -0.35), y: actor.ty, z };
+        }
+        const arrive = this.meetBall(actor, 'block', hand, 0.28 * this.paceScale);
         if (e.type === 'blockPoint') {
           const bx = actor.team === 0 ? actor.x - 3.2 : actor.x + 3.2;
-          this.pendingOutbound = {
-            from: hand,
-            to: { x: bx, y: actor.y, z: 0.2 },
-            spin: 'spike',
-            delay: arrive,
-          };
+          this.scheduleOutbound({ x: bx, y: actor.y, z: 0.2 }, 'spike');
         } else if (e.type === 'softBlock') {
           const defX = actor.team === 0 ? actor.x - 2 : actor.x + 2;
-          this.pendingOutbound = {
-            from: hand,
-            to: { x: defX, y: 4 + Math.random() * 2, z: 1.2 },
-            spin: 'none',
-            delay: arrive,
-          };
+          this.scheduleOutbound({ x: defX, y: 4 + Math.random() * 2, z: 1.2 }, 'none');
         }
-        this.setCam('net', 9, Math.min(5, actor.y), 1.3, 0.85);
+        this.contactBusyHint = arrive + 0.04;
         break;
       }
       case 'blockOut': {
-        // Tool: ball continues past block to floor out
         const landX = this.ball.x + (Math.random() > 0.5 ? 2 : -2);
-        this.pendingOutbound = {
-          from: { x: this.ball.x, y: this.ball.y, z: this.ball.z },
-          to: { x: landX, y: this.ball.y, z: 0.12 },
-          spin: 'spike',
-          delay: 0.05,
-        };
+        this.scheduleOutbound({ x: landX, y: this.ball.y, z: 0.12 }, 'spike');
+        this.fireOutboundFromContact();
+        this.contactBusyHint = 0.2;
         break;
       }
       case 'setterDump': {
         if (!actor) break;
         const z = contactHeight('dump', actor.heightCm, actor.jumpAttr);
         const hand = this.handWorld(actor, 'dump', z);
-        const arrive = 0.2;
-        this.launchBall(hand, 'none', arrive);
-        this.cueContact(actor, 'dump', now + arrive, z);
-        this.pendingOutbound = {
-          from: hand,
-          to: { x: actor.team === 0 ? 11.5 : 6.5, y: actor.y, z: 0.2 },
-          spin: 'none',
-          delay: arrive,
-        };
-        this.setCam('net', 9, Math.min(5, actor.y), 1.2, 1.0);
+        const arrive = this.meetBall(actor, 'dump', hand, 0.18);
+        this.scheduleOutbound({ x: actor.team === 0 ? 11.5 : 6.5, y: actor.y, z: 0.2 }, 'none');
+        this.contactBusyHint = arrive + 0.03;
         break;
       }
       case 'ace':
         this.flash = { text: 'ACE!', t: 1.6, color: '#ffd166' };
-        this.shake = 0.55; this.crowd = 1; this.benchEnergy = 1;
+        this.shake = 0.4; this.crowd = 1; this.benchEnergy = 1;
         this.refSignal = Math.random() > 0.5 ? 'pointL' : 'pointR'; this.refSignalT = 1.2;
-        // Ball to floor deep
-        this.pendingOutbound = {
-          from: { x: this.ball.x, y: this.ball.y, z: this.ball.z },
-          to: { x: this.ball.x, y: this.ball.y, z: 0.1 },
-          spin: 'serve',
-          delay: 0.05,
-        };
+        this.scheduleOutbound({ x: this.ball.x, y: this.ball.y, z: 0.1 }, 'serve');
+        this.fireOutboundFromContact();
         break;
       case 'attackError': case 'ballOut':
         this.ball.bounceT = 0.6;
@@ -619,10 +615,13 @@ export class CourtView {
     }
   }
 
-  private setCam(mode: CamMode, fx: number, fy: number, zoom: number, dur: number) {
-    this.cam.mode = mode;
-    this.cam.tfx = fx; this.cam.tfy = fy; this.cam.tzoom = zoom;
-    this.cam.timer = dur;
+  private setCam(_mode: CamMode, _fx: number, _fy: number, _zoom: number, _dur: number) {
+    // v9: always keep full-court framing — never zoom/crop players
+    this.cam.mode = 'courtside';
+    this.cam.tfx = 9;
+    this.cam.tfy = 3.5;
+    this.cam.tzoom = this.mobile ? 0.78 : 0.84;
+    this.cam.timer = 0;
   }
 
   update(dt: number) {
@@ -658,7 +657,7 @@ export class CourtView {
       }
       if (this.replay.i >= this.replay.events.length && this.replay.t > 1.2) {
         this.replay = null;
-        this.setCam('courtside', 9, 3.5, 1.05, 0.8);
+        this.setCam('courtside', 9, 3.5, 0.84, 0.8);
       }
     }
 
@@ -673,38 +672,16 @@ export class CourtView {
     this.benchEnergy = Math.max(0, this.benchEnergy - d * 0.35);
     if (this.refSignalT > 0) { this.refSignalT -= d; if (this.refSignalT <= 0) this.refSignal = 'none'; }
 
-    // Smooth camera
-    // Critically damped-ish follow (smooth, no overshoot jitter)
-    const k = 1 - Math.pow(0.0003, d);
+    // Full-court lock — gentle settle only, no ball chase / no zoom cuts
+    this.cam.tfx = 9;
+    this.cam.tfy = 3.5;
+    this.cam.tzoom = this.mobile ? 0.78 : 0.84;
+    const k = 1 - Math.pow(0.0008, d);
     this.cam.focusX += (this.cam.tfx - this.cam.focusX) * k;
     this.cam.focusY += (this.cam.tfy - this.cam.focusY) * k;
-    this.cam.zoom += (this.cam.tzoom - this.cam.zoom) * Math.min(1, k * 1.1);
-    if (this.cam.timer > 0) {
-      this.cam.timer -= d;
-      if (this.cam.timer <= 0 && this.cam.mode !== 'courtside' && !this.replay) {
-        this.setCam('courtside', 9, 3.5, this.mobile ? 1.2 : 1.05, 0.6);
-      }
-    }
-    // Gentle courtside follow of the ball (damped — never jittery)
-    if (!this.replay && this.cam.mode === 'courtside') {
-      const bias = this.mobile ? 0.32 : 0.22;
-      this.cam.tfx = 9 * (1 - bias) + this.ball.x * bias;
-      this.cam.tfx = Math.min(11.2, Math.max(6.8, this.cam.tfx));
-      this.cam.tfy = 3.4 * 0.75 + Math.min(5.5, this.ball.y) * 0.25;
-      // Default zoom; contact cams set tzoom temporarily
-      if (this.cam.timer <= 0) this.cam.tzoom = this.mobile ? 1.05 : 1.02;
-    }
-
-    // Pending outbound after contact delay
-    if (this.pendingOutbound) {
-      this.pendingOutbound.delay -= d;
-      if (this.pendingOutbound.delay <= 0) {
-        const o = this.pendingOutbound;
-        this.pendingOutbound = null;
-        this.ball.x = o.from.x; this.ball.y = o.from.y; this.ball.z = o.from.z;
-        this.launchBall(o.to, o.spin);
-      }
-    }
+    this.cam.zoom += (this.cam.tzoom - this.cam.zoom) * k;
+    this.cam.mode = 'courtside';
+    this.cam.timer = 0;
 
     // Ball physics flight
     if (this.ball.flight) {
@@ -802,6 +779,34 @@ export class CourtView {
     }
   }
 
+  /** Playwright: screen-space AABB for all on-court players (feet + head). */
+  debugPlayerScreens(w: number, h: number): { id: string; x: number; top: number; bottom: number; left: number; right: number }[] {
+    this.mobile = w < 700;
+    const cam = this.makeCam(w, h);
+    const out: { id: string; x: number; top: number; bottom: number; left: number; right: number }[] = [];
+    for (const c of this.chars.values()) {
+      let jump = 0;
+      if (c.cue && this.time >= c.cue.takeoffAt && this.time <= c.cue.landAt) {
+        jump = c.jumpH * 0.9;
+      }
+      const [sx, sy, sc] = cam.project(c.x, c.y, jump);
+      const heightFactor = 1.0 + (c.heightCm - 170) * 0.012;
+      const nearBoost = 1.0 + Math.max(0, (5 - c.y) / 5) * 0.45;
+      let bodyH = sc * 1.35 * heightFactor * nearBoost;
+      bodyH = Math.max(h * 0.09, Math.min(h * 0.24, bodyH));
+      const half = bodyH * 0.22;
+      out.push({
+        id: c.id,
+        x: c.x,
+        top: sy - bodyH * 1.05,
+        bottom: sy + bodyH * 0.08,
+        left: sx - half,
+        right: sx + half,
+      });
+    }
+    return out;
+  }
+
   draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
     this.mobile = w < 700;
     ctx.save();
@@ -849,25 +854,24 @@ export class CourtView {
 
   /** Courtside: low sideline camera. Near sideline (y~0) large in foreground; far (y~9) smaller. Always frames full court with mild focus bias. */
   private makeCam(w: number, h: number) {
-    // Soft focus — never lose the court. Clamp zoom.
-    const zoom = Math.min(1.55, Math.max(0.95, this.cam.zoom));
-    const focusX = Math.min(14, Math.max(4, this.cam.focusX));
-    const focusY = Math.min(6, Math.max(2, this.cam.focusY));
-    // Base scale so court length fills ~88% of width at mid-depth
-    const base = (w * 0.88) / COURT_L;
+    // v9 full-court: pull back so all 12 players + net + apron fit with headroom
+    const zoom = Math.min(0.92, Math.max(0.7, this.cam.zoom));
+    const focusX = 9;
+    const focusY = 3.5;
+    // Slight letterbox on tall mobile — prefer seeing full court over ball crop
+    const base = (w * (this.mobile ? 0.78 : 0.82)) / COURT_L;
     return {
       w, h, zoom,
       project: (x: number, y: number, z = 0): [number, number, number] => {
-        // Courtside perspective — near larger, with headroom at top
-        const persp = 1.7 / (0.9 + y * 0.13);
+        const persp = 1.55 / (0.95 + y * 0.11);
         const scale = base * persp * zoom;
-        const midPull = (y / COURT_W) * 0.18;
-        const cx = w * 0.5 - (focusX - 9) * base * 0.22 * zoom;
+        const midPull = (y / COURT_W) * 0.12;
+        const cx = w * 0.5 - (focusX - 9) * base * 0.08 * zoom;
         const sx = cx + (x - 9) * scale * (1 - midPull);
-        // Floor extends into bottom; leave ~12% headroom above far action
-        const y0 = h * (this.mobile ? 0.86 : 0.90);
-        const ySpan = h * (this.mobile ? 0.58 : 0.54) * zoom;
-        const sy = y0 - (y / COURT_W) * ySpan - (focusY - 3.5) * 5 - z * scale * 0.85;
+        // More bottom apron + headroom so jumpers never clip top
+        const y0 = h * (this.mobile ? 0.82 : 0.86);
+        const ySpan = h * (this.mobile ? 0.48 : 0.46) * zoom;
+        const sy = y0 - (y / COURT_W) * ySpan - (focusY - 3.5) * 3 - z * scale * 0.72;
         return [sx, sy, scale];
       },
     };
@@ -1272,9 +1276,9 @@ export class CourtView {
     // Target: near-side characters ~25-45% of visible court / view height
     const heightFactor = 1.0 + (c.heightCm - 170) * 0.012;
     // Near players ~30-42% of view height; far ~16-24%
-    const nearBoost = 1.05 + Math.max(0, (5 - c.y) / 5) * 0.85;
-    let bodyH = sc * 1.55 * heightFactor * nearBoost;
-    bodyH = Math.max(viewH * 0.14, Math.min(viewH * 0.36, bodyH));
+    const nearBoost = 1.0 + Math.max(0, (5 - c.y) / 5) * 0.45;
+    let bodyH = sc * 1.35 * heightFactor * nearBoost;
+    bodyH = Math.max(viewH * 0.09, Math.min(viewH * 0.24, bodyH));
 
     const bob = Math.sin(this.time * 5 + c.num) * (c.anim === 'ready' || c.anim === 'idle' ? 1.5 : 0);
     const draw: CharDraw = {

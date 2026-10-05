@@ -53,6 +53,10 @@ export class CourtView {
   shake = 0;
   crowd = 0.35;
   graphics: 'low' | 'medium' | 'high' | 'ultra' = 'high';
+  showLabels = true;
+  refSignal: 'none' | 'pointL' | 'pointR' | 'whistle' = 'none';
+  refSignalT = 0;
+  benchEnergy = 0;
   teamNames: [string, string] = ['HOME', 'AWAY'];
   lastEvent = '';
   huddle = false;
@@ -150,7 +154,7 @@ export class CourtView {
     if (e.type === 'rallyStart' || e.type === 'serve') this.huddle = false;
 
     if (e.type === 'point' || e.type === 'ace' || e.type === 'kill' || e.type === 'blockPoint') {
-      this.shake = 0.45; this.crowd = Math.min(1, this.crowd + 0.2);
+      this.shake = 0.45; this.crowd = Math.min(1, this.crowd + 0.2); this.benchEnergy = Math.min(1, this.benchEnergy + 0.55); this.refSignal = 'whistle'; this.refSignalT = 0.8;
       if (e.player) {
         const c = this.chars.get(e.player);
         if (c) { this.setAnim(c, 'celebrate'); c.expression = 1; }
@@ -252,7 +256,7 @@ export class CourtView {
       }
       case 'ace':
         this.flash = { text: 'ACE!', t: 1.6, color: '#ffd166' };
-        this.shake = 0.55; this.crowd = 1;
+        this.shake = 0.55; this.crowd = 1; this.benchEnergy = 1; this.refSignal = Math.random() > 0.5 ? 'pointL' : 'pointR'; this.refSignalT = 1.2;
         break;
     }
   }
@@ -294,6 +298,8 @@ export class CourtView {
     if (this.flash) { this.flash.t -= d; if (this.flash.t <= 0) this.flash = null; }
     if (this.huddle) this.huddleT += d;
     this.crowd = Math.max(0.28, this.crowd - d * 0.04);
+    this.benchEnergy = Math.max(0, this.benchEnergy - d * 0.35);
+    if (this.refSignalT > 0) { this.refSignalT -= d; if (this.refSignalT <= 0) this.refSignal = 'none'; }
 
     // Smooth camera
     const k = 1 - Math.pow(0.001, d);
@@ -367,9 +373,10 @@ export class CourtView {
     if (this.graphics !== 'low') this.drawCrowd(ctx, w, h, cam);
     this.drawGymWall(ctx, w, h, cam);
     this.drawScoreboardBoard(ctx, w, h, cam);
+    this.drawFloorApron(ctx, w, h, cam);
     this.drawCourt(ctx, cam);
     this.drawNet(ctx, cam);
-    if (this.graphics === 'high' || this.graphics === 'ultra') {
+    if (this.graphics !== 'low') {
       this.drawBenches(ctx, cam);
       this.drawReferee(ctx, cam);
       this.drawCoach(ctx, cam);
@@ -410,16 +417,16 @@ export class CourtView {
     return {
       w, h, zoom,
       project: (x: number, y: number, z = 0): [number, number, number] => {
-        // Strong courtside perspective: near much larger
-        const persp = 1.85 / (0.85 + y * 0.14);
+        // Courtside perspective — near larger, with headroom at top
+        const persp = 1.7 / (0.9 + y * 0.13);
         const scale = base * persp * zoom;
-        const midPull = (y / COURT_W) * 0.22;
-        const cx = w * 0.5 - (focusX - 9) * base * 0.25 * zoom;
+        const midPull = (y / COURT_W) * 0.18;
+        const cx = w * 0.5 - (focusX - 9) * base * 0.22 * zoom;
         const sx = cx + (x - 9) * scale * (1 - midPull);
-        // Near sideline fills lower 55%; far edge higher
-        const y0 = h * 0.88;
-        const ySpan = h * 0.58 * zoom;
-        const sy = y0 - (y / COURT_W) * ySpan - (focusY - 3.5) * 6 - z * scale * 0.9;
+        // Floor extends into bottom; leave ~12% headroom above far action
+        const y0 = h * 0.92;
+        const ySpan = h * 0.52 * zoom;
+        const sy = y0 - (y / COURT_W) * ySpan - (focusY - 3.5) * 5 - z * scale * 0.85;
         return [sx, sy, scale];
       },
     };
@@ -469,24 +476,51 @@ export class CourtView {
     ctx.fillRect(0, Math.min(h * 0.25, far[1] - 40), w, 50);
   }
 
+
   private drawScoreboardBoard(ctx: CanvasRenderingContext2D, w: number, h: number, cam: ReturnType<CourtView['makeCam']>) {
-    // Physical gym scoreboard hanging above far side
-    const [sx, sy] = cam.project(9, 9.2, 4.5);
-    const bw = Math.min(w * 0.28, 220), bh = 36;
-    ctx.fillStyle = '#111';
+    const [sx, sy] = cam.project(9, 9.2, 4.2);
+    const bw = Math.min(w * 0.42, 340), bh = Math.max(44, h * 0.055);
+    // Panel
+    ctx.fillStyle = 'rgba(8,12,20,0.92)';
     ctx.fillRect(sx - bw / 2, sy - bh, bw, bh);
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2;
     ctx.strokeRect(sx - bw / 2, sy - bh, bw, bh);
-    ctx.font = 'bold 14px sans-serif';
+    // Team colour bars
+    ctx.fillStyle = this.colors[0][0];
+    ctx.fillRect(sx - bw / 2 + 2, sy - bh + 2, 6, bh - 4);
+    ctx.fillStyle = this.colors[1][0];
+    ctx.fillRect(sx + bw / 2 - 8, sy - bh + 2, 6, bh - 4);
+    const nameSize = Math.max(11, Math.min(16, bw * 0.045));
+    const scoreSize = Math.max(16, Math.min(22, bw * 0.07));
     ctx.textAlign = 'center';
-    ctx.fillStyle = this.readableColor(this.colors[0][1], this.colors[0][0]);
-    ctx.fillText(`${this.teamNames[0]} ${this.score[0]}`, sx - bw * 0.28, sy - 12);
+    ctx.textBaseline = 'middle';
+    const midY = sy - bh / 2;
+    // Home
+    ctx.fillStyle = this.readableColor(this.colors[0][1], '#ffd166');
+    ctx.font = `bold ${nameSize}px sans-serif`;
+    const n0 = (this.teamNames[0] || 'HOME').slice(0, 14);
+    ctx.fillText(n0, sx - bw * 0.28, midY - 6);
+    ctx.font = `bold ${scoreSize}px sans-serif`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(`S${this.setNumber}`, sx, sy - 12);
-    ctx.fillStyle = this.readableColor(this.colors[1][1], this.colors[1][0]);
-    ctx.fillText(`${this.score[1]} ${this.teamNames[1]}`, sx + bw * 0.28, sy - 12);
+    ctx.fillText(String(this.score[0]), sx - bw * 0.12, midY + 4);
+    // Set
+    ctx.fillStyle = '#ffd166';
+    ctx.font = `bold ${Math.max(10, nameSize - 1)}px sans-serif`;
+    ctx.fillText(`SET ${this.setNumber}`, sx, midY - 6);
+    ctx.fillStyle = '#a0c4e8';
+    ctx.font = `${Math.max(9, nameSize - 2)}px sans-serif`;
+    ctx.fillText(`${this.sets[0]} - ${this.sets[1]}`, sx, midY + 10);
+    // Away
+    ctx.fillStyle = this.readableColor(this.colors[1][1], '#74b9ff');
+    ctx.font = `bold ${nameSize}px sans-serif`;
+    const n1 = (this.teamNames[1] || 'AWAY').slice(0, 14);
+    ctx.fillText(n1, sx + bw * 0.28, midY - 6);
+    ctx.font = `bold ${scoreSize}px sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(this.score[1]), sx + bw * 0.12, midY + 4);
     ctx.textAlign = 'left';
   }
+
 
   private readableColor(preferred: string, fallback: string): string {
     // Ensure away team text visible — prefer light accent
@@ -494,6 +528,34 @@ export class CourtView {
     if (isDark(c) && isDark(fallback)) return '#ffe08a';
     if (isDark(c)) return '#fff';
     return c;
+  }
+
+
+  private drawFloorApron(ctx: CanvasRenderingContext2D, w: number, h: number, cam: ReturnType<CourtView['makeCam']>) {
+    const nearL = cam.project(-2.2, -1.2, 0);
+    const nearR = cam.project(20.2, -1.2, 0);
+    const midL = cam.project(-1.5, 0, 0);
+    const midR = cam.project(19.5, 0, 0);
+    const g = ctx.createLinearGradient(0, h * 0.7, 0, h);
+    g.addColorStop(0, '#8a6a3e');
+    g.addColorStop(0.5, '#7a5c35');
+    g.addColorStop(1, '#5c4224');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(w, h);
+    ctx.lineTo(Math.max(w, nearR[0]), Math.min(h, nearR[1] + 40));
+    ctx.lineTo(midR[0], midR[1]);
+    ctx.lineTo(midL[0], midL[1]);
+    ctx.lineTo(Math.min(0, nearL[0]), Math.min(h, nearL[1] + 40));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(midL[0], midL[1]);
+    ctx.lineTo(midR[0], midR[1]);
+    ctx.stroke();
   }
 
   private drawCourt(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
@@ -537,43 +599,127 @@ export class CourtView {
     ctx.beginPath(); ctx.moveTo(botF[0], botF[1]); ctx.lineTo(topF[0], topF[1] - 12); ctx.stroke();
   }
 
+
   private drawBenches(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
-    const left = cam.project(-1.5, 1.5, 0);
-    const right = cam.project(19.5, 1.5, 0);
-    const sc = left[2];
-    ctx.fillStyle = this.colors[0][0];
-    ctx.fillRect(left[0] - sc * 0.5, left[1] - sc * 0.15, sc * 1.0, sc * 0.12);
-    ctx.fillStyle = this.colors[1][0];
-    ctx.fillRect(right[0] - sc * 0.5, right[1] - sc * 0.15, sc * 1.0, sc * 0.12);
-    // Bench players as small figures
-    for (let i = 0; i < 4; i++) {
-      ctx.fillStyle = this.colors[0][1];
-      ctx.beginPath(); ctx.arc(left[0] - sc * 0.3 + i * sc * 0.22, left[1] - sc * 0.28, sc * 0.06, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = this.colors[1][1];
-      ctx.beginPath(); ctx.arc(right[0] - sc * 0.3 + i * sc * 0.22, right[1] - sc * 0.28, sc * 0.06, 0, Math.PI * 2); ctx.fill();
+    const energy = this.benchEnergy;
+    const seats = this.graphics === 'ultra' ? 5 : 4;
+    const drawBench = (team: 0 | 1, bx: number, by: number) => {
+      const [sx, sy, sc] = cam.project(bx, by, 0);
+      // Bench plank
+      ctx.fillStyle = '#3a2a18';
+      ctx.fillRect(sx - sc * 0.85, sy - sc * 0.08, sc * 1.7, sc * 0.12);
+      ctx.fillStyle = this.colors[team][0];
+      ctx.fillRect(sx - sc * 0.85, sy - sc * 0.14, sc * 1.7, sc * 0.05);
+      for (let i = 0; i < seats; i++) {
+        const px = sx - sc * 0.65 + i * sc * 0.35;
+        const stand = energy > 0.35 && (i + team) % 2 === 0;
+        const py = sy - (stand ? sc * 0.55 : sc * 0.32) - Math.sin(this.time * 8 + i) * energy * sc * 0.08;
+        const ph = stand ? sc * 0.55 : sc * 0.38;
+        // Body
+        ctx.fillStyle = this.colors[team][0];
+        ctx.fillRect(px - sc * 0.06, py - ph * 0.55, sc * 0.12, ph * 0.45);
+        // Head
+        ctx.fillStyle = '#e8b896';
+        ctx.beginPath(); ctx.arc(px, py - ph * 0.65, sc * 0.07, 0, Math.PI * 2); ctx.fill();
+        // Arms up when cheering
+        if (stand || energy > 0.6) {
+          ctx.strokeStyle = this.colors[team][0];
+          ctx.lineWidth = Math.max(2, sc * 0.04);
+          ctx.beginPath();
+          ctx.moveTo(px - sc * 0.05, py - ph * 0.4);
+          ctx.lineTo(px - sc * 0.18, py - ph * 0.75 - energy * sc * 0.1);
+          ctx.moveTo(px + sc * 0.05, py - ph * 0.4);
+          ctx.lineTo(px + sc * 0.18, py - ph * 0.75 - energy * sc * 0.1);
+          ctx.stroke();
+        }
+      }
+      // Coach beside bench
+      const cx = sx + (team === 0 ? -sc * 1.05 : sc * 1.05);
+      const cy = sy - sc * 0.5 - energy * sc * 0.06;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(cx - sc * 0.08, cy - sc * 0.35, sc * 0.16, sc * 0.4);
+      ctx.fillStyle = '#c6865c';
+      ctx.beginPath(); ctx.arc(cx, cy - sc * 0.45, sc * 0.09, 0, Math.PI * 2); ctx.fill();
+      // Clipboard
+      ctx.fillStyle = '#f5e6c8';
+      ctx.fillRect(cx + sc * 0.06, cy - sc * 0.2, sc * 0.1, sc * 0.14);
+    };
+    drawBench(0, -1.8, 0.6);
+    drawBench(1, 19.8, 0.6);
+  }
+
+
+
+  private drawReferee(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
+    const [sx, sy, sc] = cam.project(9.55, -0.55, 0);
+    const h = sc * 1.65;
+    // Elevated stand (platform + rail)
+    ctx.fillStyle = '#4a5568';
+    ctx.fillRect(sx - h * 0.28, sy - h * 0.22, h * 0.56, h * 0.22);
+    ctx.strokeStyle = '#718096';
+    ctx.lineWidth = Math.max(2, h * 0.03);
+    ctx.strokeRect(sx - h * 0.28, sy - h * 0.22, h * 0.56, h * 0.22);
+    // Legs of stand
+    ctx.strokeStyle = '#2d3748';
+    ctx.lineWidth = Math.max(2, h * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(sx - h * 0.22, sy); ctx.lineTo(sx - h * 0.18, sy - h * 0.22);
+    ctx.moveTo(sx + h * 0.22, sy); ctx.lineTo(sx + h * 0.18, sy - h * 0.22);
+    ctx.stroke();
+    // Referee body on stand
+    const footY = sy - h * 0.22;
+    const bodyTop = footY - h * 0.55;
+    // Legs
+    ctx.strokeStyle = '#1a202c';
+    ctx.lineWidth = h * 0.07;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sx - h * 0.06, footY); ctx.lineTo(sx - h * 0.05, footY - h * 0.25);
+    ctx.moveTo(sx + h * 0.06, footY); ctx.lineTo(sx + h * 0.05, footY - h * 0.25);
+    ctx.stroke();
+    // Torso (official black/white)
+    ctx.fillStyle = '#1a202c';
+    ctx.fillRect(sx - h * 0.1, bodyTop, h * 0.2, h * 0.32);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(sx - h * 0.1, bodyTop + h * 0.08, h * 0.2, h * 0.06);
+    // Head
+    ctx.fillStyle = '#e8b896';
+    ctx.beginPath(); ctx.arc(sx, bodyTop - h * 0.08, h * 0.09, 0, Math.PI * 2); ctx.fill();
+    // Cap
+    ctx.fillStyle = '#1a202c';
+    ctx.beginPath(); ctx.ellipse(sx, bodyTop - h * 0.14, h * 0.1, h * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(sx - h * 0.02, bodyTop - h * 0.2, h * 0.04, h * 0.06);
+    // Arm signals
+    ctx.strokeStyle = '#1a202c';
+    ctx.lineWidth = h * 0.055;
+    const sig = this.refSignal;
+    let lArm = 0.15, rArm = 0.15;
+    if (sig === 'pointL') { lArm = -0.95; rArm = 0.2; }
+    else if (sig === 'pointR') { rArm = -0.95; lArm = 0.2; }
+    else if (sig === 'whistle') { lArm = -0.4; rArm = 0.35; }
+    const shoulderY = bodyTop + h * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(sx - h * 0.1, shoulderY);
+    ctx.lineTo(sx - h * 0.1 + Math.sin(lArm) * h * 0.05, shoulderY + lArm * h * 0.35);
+    ctx.moveTo(sx + h * 0.1, shoulderY);
+    ctx.lineTo(sx + h * 0.1 + Math.sin(rArm) * h * 0.05, shoulderY + rArm * h * 0.35);
+    ctx.stroke();
+    // Whistle
+    if (sig === 'whistle' || this.refSignalT > 0.5) {
+      ctx.fillStyle = '#cbd5e0';
+      ctx.beginPath();
+      ctx.arc(sx + h * 0.02, bodyTop - h * 0.02, h * 0.025, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  private drawReferee(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
-    const [sx, sy, sc] = cam.project(9.4, -0.3, 0);
-    const h = sc * 1.5;
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(sx - h * 0.08, sy - h * 0.7, h * 0.16, h * 0.45);
-    ctx.fillStyle = '#f0c8a0';
-    ctx.beginPath(); ctx.arc(sx, sy - h * 0.78, h * 0.1, 0, Math.PI * 2); ctx.fill();
-    // Stand
-    ctx.strokeStyle = '#666'; ctx.lineWidth = 2;
-    ctx.strokeRect(sx - h * 0.2, sy - h * 0.3, h * 0.4, h * 0.3);
+
+
+  private drawCoach(ctx: CanvasRenderingContext2D, _cam: ReturnType<CourtView['makeCam']>) {
+    // Coaches are drawn inside drawBenches for v3
+    void ctx; void _cam;
   }
 
-  private drawCoach(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
-    const [sx, sy, sc] = cam.project(-1.2, 3.5, 0);
-    const h = sc * 1.4;
-    ctx.fillStyle = this.colors[0][0];
-    ctx.fillRect(sx - h * 0.1, sy - h * 0.65, h * 0.2, h * 0.4);
-    ctx.fillStyle = '#e8b896';
-    ctx.beginPath(); ctx.arc(sx, sy - h * 0.75, h * 0.1, 0, Math.PI * 2); ctx.fill();
-  }
 
   private drawHuddleOverlay(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.fillStyle = 'rgba(8, 18, 32, 0.55)';
@@ -601,9 +747,9 @@ export class CourtView {
     // Target: near-side characters ~25-45% of visible court / view height
     const heightFactor = 1.0 + (c.heightCm - 170) * 0.012;
     // Near players ~30-42% of view height; far ~16-24%
-    const nearBoost = 1.15 + Math.max(0, (5 - c.y) / 5) * 1.1;
-    let bodyH = sc * 1.65 * heightFactor * nearBoost;
-    bodyH = Math.max(viewH * 0.16, Math.min(viewH * 0.44, bodyH));
+    const nearBoost = 1.05 + Math.max(0, (5 - c.y) / 5) * 0.85;
+    let bodyH = sc * 1.55 * heightFactor * nearBoost;
+    bodyH = Math.max(viewH * 0.14, Math.min(viewH * 0.36, bodyH));
 
     const bob = Math.sin(this.time * 5 + c.num) * (c.anim === 'ready' || c.anim === 'idle' ? 1.5 : 0);
     const draw: CharDraw = {
@@ -616,8 +762,9 @@ export class CourtView {
       name: c.name, anim: c.anim, animT: c.animT,
       expression: exprFromState(c.expression, c.anim),
       facing: c.facing, starSig: c.starSig,
+      showLabel: this.showLabels && (c.y < 4.5 || bodyH > viewH * 0.22),
+      crestColor: this.colors[c.team][1],
     };
-    // Shadows only on medium+
     drawCharacter(ctx, draw, sx, sy, bodyH, bob);
   }
 

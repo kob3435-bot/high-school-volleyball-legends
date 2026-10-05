@@ -65,8 +65,8 @@
   ],
   "bio": "Smallest giant. Explodes past the block.",
   "appearance": {
-   "hairColor": "#e8e8e8",
-   "hairStyle": 2,
+   "hairColor": "#ff7a18",
+   "hairStyle": 1,
    "skinTone": 4,
    "eyeColor": "#8b4513",
    "build": 0.2305024714092724,
@@ -140,7 +140,7 @@
   "bio": "The king of the court. Sees three plays ahead.",
   "appearance": {
    "hairColor": "#c4a35a",
-   "hairStyle": 4,
+   "hairStyle": 0,
    "skinTone": 4,
    "eyeColor": "#1a1a2e",
    "build": 0.44143243043217806,
@@ -715,8 +715,8 @@
   ],
   "bio": "Brain of the team. Never wastes a set.",
   "appearance": {
-   "hairColor": "#1a1a1a",
-   "hairStyle": 1,
+   "hairColor": "#c9a227",
+   "hairStyle": 4,
    "skinTone": 4,
    "eyeColor": "#3d5a3d",
    "build": 0.6379614218953065,
@@ -830,8 +830,8 @@
    "floatServe": 72,
    "targeting": 72,
    "serveReceive": 97,
-   "dig": 98,
-   "reaction": 95,
+   "dig": 99,
+   "reaction": 98,
    "positioning": 96,
    "ballControl": 94,
    "blockReach": 72,
@@ -854,11 +854,13 @@
    "adaptability": 72,
    "competitive": 72
   },
-  "signatures": [],
+  "signatures": [
+   "GUARDIAN_DEITY"
+  ],
   "bio": "Cat-like libero. Endless rallies.",
   "appearance": {
    "hairColor": "#ff6b35",
-   "hairStyle": 4,
+   "hairStyle": 5,
    "skinTone": 3,
    "eyeColor": "#8b4513",
    "build": 0.8496538302162662,
@@ -1141,7 +1143,7 @@
   "bio": "Grand king. Serve pressure incarnate.",
   "appearance": {
    "hairColor": "#1a1a1a",
-   "hairStyle": 6,
+   "hairStyle": 4,
    "skinTone": 0,
    "eyeColor": "#1a1a2e",
    "build": 0.2024447804549709,
@@ -1635,8 +1637,8 @@
   ],
   "bio": "Guess monster. High risk, high reward.",
   "appearance": {
-   "hairColor": "#ff6b35",
-   "hairStyle": 3,
+   "hairColor": "#e8e8e8",
+   "hairStyle": 7,
    "skinTone": 4,
    "eyeColor": "#8b4513",
    "build": 0.442475230875425,
@@ -1705,8 +1707,8 @@
   "signatures": [],
   "bio": "Power wing support.",
   "appearance": {
-   "hairColor": "#2c1810",
-   "hairStyle": 6,
+   "hairColor": "#f5f5f5",
+   "hairStyle": 0,
    "skinTone": 3,
    "eyeColor": "#4a90a4",
    "build": 0.7004571632482111,
@@ -1984,12 +1986,13 @@
   },
   "signatures": [
    "RISK_SETTING",
-   "TWIN_QUICK"
+   "TWIN_QUICK",
+   "PRESSURE_FLOAT"
   ],
   "bio": "Creative risk-taker. Twin engine.",
   "appearance": {
-   "hairColor": "#ff6b35",
-   "hairStyle": 0,
+   "hairColor": "#1a1a1a",
+   "hairStyle": 5,
    "skinTone": 4,
    "eyeColor": "#8b4513",
    "build": 0.24050102536566556,
@@ -2703,8 +2706,8 @@
   ],
   "bio": "Small giant. Sky attack clears all.",
   "appearance": {
-   "hairColor": "#1a1a1a",
-   "hairStyle": 6,
+   "hairColor": "#1e3a5f",
+   "hairStyle": 1,
    "skinTone": 0,
    "eyeColor": "#5c3317",
    "build": 0.29061683707404884,
@@ -2776,7 +2779,7 @@
   "bio": "Immovable. Never bites on decoys.",
   "appearance": {
    "hairColor": "#2c1810",
-   "hairStyle": 7,
+   "hairStyle": 3,
    "skinTone": 1,
    "eyeColor": "#5c3317",
    "build": 0.6629896911559625,
@@ -4674,7 +4677,7 @@
    "deception": 82,
    "outOfSystem": 82,
    "servePower": 95,
-   "serveAccuracy": 82,
+   "serveAccuracy": 88,
    "jumpServe": 82,
    "floatServe": 82,
    "targeting": 82,
@@ -4701,9 +4704,12 @@
    "consistency": 90,
    "communication": 82,
    "adaptability": 82,
-   "competitive": 82
+   "competitive": 82,
+   "powerServe": 90
   },
-  "signatures": [],
+  "signatures": [
+   "TARGET_SERVE"
+  ],
   "bio": "Player from aoba.",
   "appearance": {
    "hairColor": "#1a1a1a",
@@ -5374,9 +5380,9 @@
    "deception": 96,
    "outOfSystem": 82,
    "servePower": 82,
-   "serveAccuracy": 82,
+   "serveAccuracy": 90,
    "jumpServe": 82,
-   "floatServe": 82,
+   "floatServe": 92,
    "targeting": 82,
    "serveReceive": 82,
    "dig": 82,
@@ -5403,7 +5409,9 @@
    "adaptability": 82,
    "competitive": 82
   },
-  "signatures": [],
+  "signatures": [
+   "PRESSURE_FLOAT"
+  ],
   "bio": "Player from inari.",
   "appearance": {
    "hairColor": "#ff6b35",
@@ -6923,8 +6931,8 @@
    "reaction": 66,
    "positioning": 66,
    "ballControl": 66,
-   "blockReach": 66,
-   "blockTiming": 78,
+   "blockReach": 90,
+   "blockTiming": 92,
    "blockRead": 77,
    "blockCommit": 66,
    "closingSpeed": 66,
@@ -6943,7 +6951,9 @@
    "adaptability": 66,
    "competitive": 66
   },
-  "signatures": [],
+  "signatures": [
+   "IRON_WALL"
+  ],
   "bio": "Player from date.",
   "appearance": {
    "hairColor": "#c4a35a",
@@ -7713,7 +7723,9 @@
    "adaptability": 82,
    "competitive": 82
   },
-  "signatures": [],
+  "signatures": [
+   "IMMOVABLE_BLOCK"
+  ],
   "bio": "Player from kamome.",
   "appearance": {
    "hairColor": "#ff6b35",

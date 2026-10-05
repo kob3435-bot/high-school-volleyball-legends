@@ -49,6 +49,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
       [team.short, opponent.short],
     );
     view.graphics = ctx.settings.graphics === 'auto' ? 'high' : ctx.settings.graphics;
+    view.showLabels = true;
     view.replayMode = ctx.settings.replay;
     viewRef.current = view;
     setRotation(sim.st.teams[0].rotation.slice());
@@ -181,6 +182,10 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           <button class="btn sm" data-testid="btn-skip-rally" onClick={skipRally}>{t(lang, 'skipRally')}</button>
           <button class="btn sm" data-testid="btn-skip-set" onClick={skipSet}>{t(lang, 'skipSet')}</button>
           <button class="btn sm" data-testid="btn-tactics" onClick={() => setPanelOpen((o) => !o)}>{t(lang, 'tactics')}</button>
+          <button class="btn sm" data-testid="btn-labels" onClick={() => {
+            const v = viewRef.current; if (!v) return;
+            v.showLabels = !v.showLabels;
+          }}>{t(lang, 'nameLabels')}</button>
           <button class="btn sm" data-testid="btn-timeout" onClick={doTimeout}>{t(lang, 'timeout')}</button>
           <button class="btn sm" data-testid="btn-sub" onClick={() => { setSubOpen(true); setPaused(true); }}>{t(lang, 'sub')}</button>
         </div>

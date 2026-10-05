@@ -34,6 +34,7 @@ export interface MatchState {
   scouting: {
     attackByPlayer: Record<string, Record<string, number>>;
     setTargets: Record<string, number>;
+    attackDirections: Record<string, number>;
   };
   turningPoints: { set: number; score: [number, number]; text: string }[];
 }
@@ -77,7 +78,7 @@ export function createMatch(a: TeamConfig, b: TeamConfig, seed: number, opts: Cr
     consecutivePoints: [0, 0],
     userTeam: opts.userTeam ?? null,
     paused: false,
-    scouting: { attackByPlayer: {}, setTargets: {} },
+    scouting: { attackByPlayer: {}, setTargets: {}, attackDirections: {} },
     turningPoints: [],
   };
 }

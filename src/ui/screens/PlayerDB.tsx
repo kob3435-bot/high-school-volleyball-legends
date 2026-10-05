@@ -3,9 +3,11 @@ import { Ctx } from '../store';
 import { Shell, PlayerCard, StatBar } from '../components';
 import { allPlayers, allSchools } from '../../engine/db';
 import { ATTR_GROUPS } from '../../engine/types';
+import { t } from '../i18n/strings';
 
 export function PlayerDB() {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const [q, setQ] = useState('');
   const [school, setSchool] = useState('all');
   const [sel, setSel] = useState<string | null>(null);
@@ -18,10 +20,10 @@ export function PlayerDB() {
   const p = players.find((x) => x.id === sel) ?? players[0];
 
   return (
-    <Shell title="Player Database" subtitle={`${allPlayers().length} players`} onBack={ctx.back}>
+    <Shell title={t(lang, 'players')} subtitle={`${allPlayers().length} ${t(lang, 'playerCount')}`} onBack={ctx.back}>
       <div class="row gap wrap" style={{ marginBottom: 10 }}>
         <input data-testid="player-search" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-          placeholder="Search…" style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--line)', background: '#0f2238', color: '#fff' }} />
+          placeholder={t(lang, 'searchPlayers')} style={{ flex: 1, padding: 8, borderRadius: 8, border: '1px solid var(--line)', background: '#0f2238', color: '#fff' }} />
         <select value={school} onChange={(e) => setSchool((e.target as HTMLSelectElement).value)}
           style={{ padding: 8, borderRadius: 8, background: '#0f2238', color: '#fff' }}>
           <option value="all">All schools</option>

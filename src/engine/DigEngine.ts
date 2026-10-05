@@ -52,18 +52,18 @@ export function executeDig(st: MatchState, defIdx: 0 | 1, atk: AttackResult, blo
     + mom;
 
   if (hasSig(digger.signatures, 'GUARDIAN_DEITY')) skill += 10;
-  if (block?.soft || block?.funnel) skill += 18;
+  if (block?.soft || block?.funnel) skill += 8;
   if (atk.direction === 'tip') skill += 8;
   if (atk.direction === 'tool') skill -= 5;
 
-  const pressure = atk.power * 0.50 + (100 - atk.accuracy) * 0.06 + st.rng.gauss(0, 8);
+  const pressure = atk.power * 0.72 + (100 - atk.accuracy) * 0.08 + st.rng.gauss(0, 12);
   const roll = skill - pressure;
 
   drainStamina(digger, 2);
   def.pstats[digger.id].digAttempts++;
 
   // Miracle save
-  if (roll < -15 && hasSig(digger.signatures, 'GUARDIAN_DEITY') && st.rng.chance(0.35)) {
+  if (roll < -10 && hasSig(digger.signatures, 'GUARDIAN_DEITY') && st.rng.chance(0.28)) {
     def.pstats[digger.id].digs++;
     def.stats.digs++;
     emit(st, { type: 'dig', team: defIdx, player: digger.id, success: true, quality: 0.5 });
@@ -71,7 +71,7 @@ export function executeDig(st: MatchState, defIdx: 0 | 1, atk: AttackResult, blo
     return { diggerId, success: true, quality: 0.45, miracle: true };
   }
 
-  if (roll >= 8) {
+  if (roll >= 18) {
     const quality = clamp(0.28 + roll * 0.007, 0.18, 0.62);
     def.pstats[digger.id].digs++;
     def.stats.digs++;

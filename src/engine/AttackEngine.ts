@@ -92,6 +92,7 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
   ad[set.attackType] = (ad[set.attackType] ?? 0) + 1;
   const scout = st.scouting.attackByPlayer[attacker.id] ?? (st.scouting.attackByPlayer[attacker.id] = {});
   scout[set.attackType] = (scout[set.attackType] ?? 0) + 1;
+  st.scouting.attackDirections[direction] = (st.scouting.attackDirections[direction] ?? 0) + 1;
 
   // Error
   let errP = 0.08 + (100 - accuracy) * 0.0018 + (1 - set.qualityScore) * 0.10;
@@ -135,20 +136,20 @@ export function executeAttack(st: MatchState, offIdx: 0 | 1, set: SetResult, blo
 
   // Kill chance vs block
   let killP = 0.09 + (power - 70) * 0.002 + (accuracy - 70) * 0.0016 + set.qualityScore * 0.10;
-  if (set.qualityScore >= 0.9) killP += 0.18;
-  else if (set.qualityScore >= 0.75) killP += 0.10;
-  else if (set.qualityScore < 0.45) killP -= 0.10;
+  if (set.qualityScore >= 0.9) killP += 0.12;
+  else if (set.qualityScore >= 0.75) killP += 0.06;
+  else if (set.qualityScore < 0.45) killP -= 0.06;
   if (block) {
     killP -= block.blockers.length * (set.qualityScore >= 0.78 ? 0.05 : 0.09);
     killP -= block.strength * 0.0015;
-    if (block.soft) killP *= 0.3;
+    if (block.soft) killP *= 0.22;
   } else {
     killP += 0.15; // no block
   }
   if (direction === 'tip') killP = 0.35 + accuracy * 0.002;
   if (hasSig(attacker.signatures, 'ACE_CANNON') && (!block || block.blockers.length <= 1)) killP += 0.12;
   if (hasSig(attacker.signatures, 'SKY_ATTACK')) killP += 0.08;
-  killP = clamp(killP, 0.05, 0.58);
+  killP = clamp(killP, 0.05, 0.46);
 
   emit(st, { type: 'attack', team: offIdx, player: attacker.id, kind: set.attackType, success: true, data: { direction, power, accuracy } });
 

@@ -6,9 +6,11 @@ import { playersBySchool, allPlayers, getPlayer } from '../../engine/db';
 import { buildSchoolTeam, buildDreamTeam, allStarTeam, validateLineup, randomTeam } from '../../engine/teamBuilder';
 import { OFF_TACTICS, DEF_TACTICS, type Tactics } from '../../engine/types';
 import { DEFAULT_TACTICS } from '../../engine/TacticalEngine';
+import { t } from '../i18n/strings';
 
 export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: string }) {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const [school, setSchool] = useState(schoolId ?? 'karasawa');
   const [step, setStep] = useState<'school' | 'six' | 'libero' | 'tactics'>(mode === 'dream' ? 'six' : 'school');
   const [selected, setSelected] = useState<string[]>([]);
@@ -28,7 +30,7 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
     }
   }, [mode]);
 
-  if (redirecting) return <div class="screen">Loading…</div>;
+  if (redirecting) return <div class="screen">{t(ctx.settings.language, 'loading')}</div>;
 
   const pool = mode === 'dream' ? allPlayers() : playersBySchool(school);
   const liberos = pool.filter((p) => p.pos === 'L');
@@ -68,10 +70,11 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
   };
 
   return (
-    <Shell title="Build Team" subtitle={mode === 'dream' ? 'Dream Team builder' : 'School roster'} onBack={ctx.back}>
+    <div data-testid="team-builder">
+    <Shell title={t(lang, 'buildTeam')} subtitle={mode === 'dream' ? t(lang, 'dreamBuilder') : t(lang, 'schoolRoster')} onBack={ctx.back}>
       {step === 'school' && mode !== 'dream' && (
         <div class="panel" data-testid="school-pick">
-          <h3>Select School</h3>
+          <h3>{t(lang, 'selectSchool')}</h3>
           <div class="grid modes">
             {SCHOOLS.filter((s) => s.id !== 'legend').slice(0, 16).map((s) => (
               <button key={s.id} class="mode-card" data-testid={`school-${s.id}`}
@@ -83,8 +86,8 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
             ))}
           </div>
           <div class="row gap" style={{ marginTop: 12 }}>
-            <button class="btn primary" data-testid="btn-continue-school" onClick={() => { autoFill(); }}>Use School Lineup</button>
-            <button class="btn" onClick={() => setStep('six')}>Custom Starting Six</button>
+            <button class="btn primary" data-testid="btn-continue-school" onClick={() => { autoFill(); }}>{t(lang, 'useLineup')}</button>
+            <button class="btn" onClick={() => setStep('six')}>{t(lang, 'customSix')}</button>
           </div>
         </div>
       )}
@@ -93,7 +96,7 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
         <div class="panel" data-testid="six-pick">
           <div class="row between">
             <h3>Starting Six ({selected.length}/6)</h3>
-            <button class="btn sm" onClick={autoFill}>Auto Fill</button>
+            <button class="btn sm" onClick={autoFill}>{t(lang, 'autoFill')}</button>
           </div>
           <p class="muted">Selected: {selected.map((id) => getPlayer(id)?.name).filter(Boolean).join(', ') || '—'}</p>
           <div class="grid players" style={{ marginTop: 10, maxHeight: 420, overflow: 'auto' }}>
@@ -102,13 +105,13 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
             ))}
           </div>
           <button class="btn primary" style={{ marginTop: 12 }} disabled={selected.length !== 6}
-            data-testid="btn-to-libero" onClick={() => setStep('libero')}>Next: Libero</button>
+            data-testid="btn-to-libero" onClick={() => setStep('libero')}>{t(lang, 'nextLibero')}</button>
         </div>
       )}
 
       {step === 'libero' && (
         <div class="panel" data-testid="libero-pick">
-          <h3>Select Libero</h3>
+          <h3>{t(lang, 'selectLibero')}</h3>
           <div class="grid players">
             {liberos.map((p) => (
               <PlayerCard key={p.id} p={p} selected={libero === p.id} onClick={() => setLibero(p.id)} />
@@ -116,28 +119,28 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
           </div>
           <div class="row gap" style={{ marginTop: 12 }}>
             <button class="btn" onClick={() => setStep('six')}>Back</button>
-            <button class="btn primary" data-testid="btn-to-tactics" disabled={!libero} onClick={() => setStep('tactics')}>Next: Tactics</button>
+            <button class="btn primary" data-testid="btn-to-tactics" disabled={!libero} onClick={() => setStep('tactics')}>{t(lang, 'nextTactics')}</button>
           </div>
         </div>
       )}
 
       {step === 'tactics' && (
         <div class="panel" data-testid="tactics-pick">
-          <h3>Tactics</h3>
+          <h3>{t(lang, 'tactics')}</h3>
           <p class="muted">Lineup: {selected.map((id) => getPlayer(id)?.name).join(', ')} · L: {libero ? getPlayer(libero)?.name : '—'}</p>
-          <label class="muted">Offense</label>
+          <label class="muted">{t(lang, 'offense')}</label>
           <select value={tactics.offense} data-testid="tactic-offense"
             onChange={(e) => setTactics({ ...tactics, offense: (e.target as HTMLSelectElement).value as Tactics['offense'] })}
             style={{ width: '100%', marginBottom: 10, padding: 8, borderRadius: 8, background: '#0f2238', color: '#fff', border: '1px solid var(--line)' }}>
             {OFF_TACTICS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <label class="muted">Defense</label>
+          <label class="muted">{t(lang, 'defense')}</label>
           <select value={tactics.defense} data-testid="tactic-defense"
             onChange={(e) => setTactics({ ...tactics, defense: (e.target as HTMLSelectElement).value as Tactics['defense'] })}
             style={{ width: '100%', marginBottom: 10, padding: 8, borderRadius: 8, background: '#0f2238', color: '#fff', border: '1px solid var(--line)' }}>
             {DEF_TACTICS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <label class="muted">Serve Target</label>
+          <label class="muted">{t(lang, 'serveTarget')}</label>
           <select value={tactics.serveTarget}
             onChange={(e) => setTactics({ ...tactics, serveTarget: (e.target as HTMLSelectElement).value as Tactics['serveTarget'] })}
             style={{ width: '100%', marginBottom: 10, padding: 8, borderRadius: 8, background: '#0f2238', color: '#fff', border: '1px solid var(--line)' }}>
@@ -145,10 +148,11 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
           </select>
           <div class="row gap" style={{ marginTop: 12 }}>
             <button class="btn" onClick={() => setStep('libero')}>Back</button>
-            <button class="btn primary big" data-testid="btn-finish-team" onClick={finish}>Confirm Team</button>
+            <button class="btn primary big" data-testid="btn-finish-team" onClick={finish}>{t(lang, 'confirmTeam')}</button>
           </div>
         </div>
       )}
     </Shell>
+    </div>
   );
 }

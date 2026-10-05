@@ -109,8 +109,13 @@ export function executeServe(st: MatchState): ServeResult {
   }
 
   const quality = clamp((power + accuracy) / 200 + st.rng.gauss(0, 0.08), 0.15, 0.98);
-  let aceChance = clamp((quality - 0.62) * 0.14 + (power - 75) * 0.001, 0.006, 0.10);
-  if (type === 'powerJump') aceChance += 0.03;
+  let aceChance = clamp((quality - 0.52) * 0.20 + (power - 72) * 0.0018, 0.02, 0.14);
+  if (type === 'powerJump') aceChance += 0.035;
+  if (type === 'jump') aceChance += 0.02;
+  if (hasSig(srv.signatures, 'PRESSURE_FLOAT') && (type === 'float' || type === 'jumpFloat')) aceChance += 0.025;
+  if (hasSig(srv.signatures, 'TARGET_SERVE')) aceChance += 0.02;
+  const schoolId = st.teams[st.serving].cfg.template || '';
+  if (schoolId === 'inari' || schoolId === 'aoba') aceChance += 0.015;
 
   servingTeam.serveTargets[target.id] = (servingTeam.serveTargets[target.id] ?? 0) + 1;
   emit(st, {

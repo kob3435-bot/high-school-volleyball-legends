@@ -4,11 +4,13 @@ import { Shell } from '../components';
 import { createTournament, simAllCPU, simMatch, advanceRound, type TournamentState } from '../../engine/Tournament';
 import { buildSchoolTeam } from '../../engine/teamBuilder';
 import { MatchSim } from '../../engine/Match';
+import { t as tr } from '../i18n/strings';
 
-const ROUND_NAMES = ['Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals', 'Final'];
+function roundNames(lang: 'en'|'th') { return [tr(lang, 'roundOf32'), tr(lang, 'roundOf16'), tr(lang, 'quarterfinals'), tr(lang, 'semifinals'), tr(lang, 'final')]; }
 
 export function TournamentScreen() {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const [t, setT] = useState<TournamentState | null>(() => save.getTournament() as TournamentState | null);
   const [school, setSchool] = useState('karasawa');
 
@@ -49,7 +51,7 @@ export function TournamentScreen() {
 
   if (!t) {
     return (
-      <Shell title="National Tournament" subtitle="32 teams · Road to the title" onBack={ctx.back}>
+      <Shell title={tr(lang, 'tournament')} subtitle={tr(lang, 'roadToTitle')} onBack={ctx.back}>
         <div class="panel">
           <label class="muted">Your school</label>
           <select value={school} onChange={(e) => setSchool((e.target as HTMLSelectElement).value)}
@@ -58,22 +60,22 @@ export function TournamentScreen() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <button class="btn primary big" data-testid="btn-start-tournament" onClick={start}>Start Tournament</button>
+          <button class="btn primary big" data-testid="btn-start-tournament" onClick={start}>{tr(lang, 'startTournament')}</button>
         </div>
       </Shell>
     );
   }
 
   return (
-    <Shell title="National Tournament" onBack={ctx.back}>
+    <Shell title={tr(lang, 'tournament')} onBack={ctx.back}>
       <div class="row gap wrap">
-        <button class="btn primary" data-testid="btn-play-next" onClick={playNext}>Play Next Match</button>
-        <button class="btn" onClick={simUser}>Sim My Match</button>
+        <button class="btn primary" data-testid="btn-play-next" onClick={playNext}>{tr(lang, 'playNextMatch')}</button>
+        <button class="btn" data-testid="btn-sim-match" onClick={simUser}>{tr(lang, 'simMyMatch')}</button>
         <button class="btn" onClick={() => { save.clearTournament(); setT(null); }}>Reset</button>
       </div>
       {[0, 1, 2, 3, 4].map((r) => (
         <div class="panel" key={r} style={{ marginTop: 10 }}>
-          <h3>{ROUND_NAMES[r]}</h3>
+          <h3>{roundNames(lang)[r]}</h3>
           {t.matches.filter((m) => m.round === r).map((m, i) => (
             <div key={i} class="row between" style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
               <span>{m.a?.short ?? 'TBD'} vs {m.b?.short ?? 'TBD'}</span>

@@ -32,6 +32,7 @@ export interface Analysis {
   weakestRotation: string;
   bestRotation: string;
   attackDistribution: Record<string, number>;
+  attackDirections: Record<string, number>;
   serveTargets: { id: string; n: number }[];
 }
 
@@ -132,6 +133,7 @@ function buildAnalysis(st: MatchState): Analysis {
     weakestRotation: 'R3',
     bestRotation: 'R1',
     attackDistribution,
+    attackDirections: { ...st.scouting.attackDirections },
     serveTargets: serveTargets.slice(0, 8),
   };
 }

@@ -1,0 +1,88 @@
+{
+  "matches": 5000,
+  "crashes": 0,
+  "validationErrors": 0,
+  "elapsedMs": 21063,
+  "sideOutPct": 0.6566934438718579,
+  "attackPct": 0.30799450090940034,
+  "blocksPerTeamSet": 2.017950939513727,
+  "digsPerTeamSet": 5.39532679915525,
+  "acePct": 0.06428127286484489,
+  "serveErrPct": 0.07516899695593218,
+  "receptionOk": 0.9111420428541148,
+  "receptionErr": 0.08885795714588517,
+  "perfectPct": 0.2422941032727194,
+  "positiveApprox": 0.2535631882856599,
+  "perSchool": {
+    "fukuro": {
+      "blocksPerSet": 0.72,
+      "digsPerSet": 4.5,
+      "acePct": 5.8,
+      "sideOut": 56.6,
+      "attackPct": 0.252
+    },
+    "aoba": {
+      "blocksPerSet": 0.73,
+      "digsPerSet": 3.8,
+      "acePct": 8.4,
+      "sideOut": 61.7,
+      "attackPct": 0.292
+    },
+    "itachi": {
+      "blocksPerSet": 1.64,
+      "digsPerSet": 6.6,
+      "acePct": 7,
+      "sideOut": 68.7,
+      "attackPct": 0.313
+    },
+    "date": {
+      "blocksPerSet": 4.8,
+      "digsPerSet": 4.3,
+      "acePct": 4.1,
+      "sideOut": 61.3,
+      "attackPct": 0.247
+    },
+    "nekoma": {
+      "blocksPerSet": 1.6,
+      "digsPerSet": 8,
+      "acePct": 6.2,
+      "sideOut": 70.1,
+      "attackPct": 0.328
+    },
+    "mujina": {
+      "blocksPerSet": 2.12,
+      "digsPerSet": 5.5,
+      "acePct": 6.6,
+      "sideOut": 71.4,
+      "attackPct": 0.341
+    },
+    "shiratori": {
+      "blocksPerSet": 0.96,
+      "digsPerSet": 4.8,
+      "acePct": 6.1,
+      "sideOut": 62.8,
+      "attackPct": 0.283
+    },
+    "kamome": {
+      "blocksPerSet": 4.61,
+      "digsPerSet": 4.6,
+      "acePct": 5.2,
+      "sideOut": 68.4,
+      "attackPct": 0.31
+    },
+    "karasawa": {
+      "blocksPerSet": 2.23,
+      "digsPerSet": 6.9,
+      "acePct": 6.2,
+      "sideOut": 73.2,
+      "attackPct": 0.428
+    },
+    "inari": {
+      "blocksPerSet": 0.76,
+      "digsPerSet": 4.8,
+      "acePct": 8.6,
+      "sideOut": 62.9,
+      "attackPct": 0.284
+    }
+  }
+}

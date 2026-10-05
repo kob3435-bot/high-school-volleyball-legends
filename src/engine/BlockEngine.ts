@@ -116,8 +116,8 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
       + (style === 'read' ? effective(b, 'blockRead', clutch) : effective(b, 'blockCommit', clutch)) * 0.25
       + effective(b, 'closingSpeed') * 0.1
       + mom;
-    if (hasSig(b.signatures, 'IRON_WALL')) s += 10;
-    if (hasSig(b.signatures, 'IMMOVABLE_BLOCK')) s += 8;
+    if (hasSig(b.signatures, 'IRON_WALL')) s += 18;
+    if (hasSig(b.signatures, 'IMMOVABLE_BLOCK')) s += 14;
     if (hasSig(b.signatures, 'READ_BLOCK')) {
       // improves over sets
       const setsPlayed = st.setNumber;
@@ -128,7 +128,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
       if (total > 5 && (hist[set.targetId] ?? 0) / total > 0.3) s += 6;
     }
     if (hasSig(b.signatures, 'GUESS_MONSTER') && style === 'guess') {
-      if (st.rng.chance(0.45)) s += 25; else s -= 20;
+      if (st.rng.chance(0.50)) s += 32; else s -= 18;
     }
     strength += s;
     drainStamina(b, 1.8);
@@ -154,7 +154,10 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     touch: false, stuff: false, tool: false, soft: false, out: false, funnel: false, strength,
   };
 
-  if (diff > 22 && st.rng.chance(clamp(0.10 + diff * 0.006, 0.06, 0.32))) {
+  let stuffChance = clamp(0.22 + diff * 0.010, 0.16, 0.52);
+  if (blockers.some((b) => hasSig(b.signatures, 'IRON_WALL') || hasSig(b.signatures, 'IMMOVABLE_BLOCK'))) stuffChance += 0.10;
+  if (blockers.some((b) => hasSig(b.signatures, 'GUESS_MONSTER')) && style === 'guess') stuffChance += 0.08;
+  if (diff > 4 && st.rng.chance(stuffChance)) {
     // stuff block
     result.touch = true; result.stuff = true;
     const hero = blockers[0];
@@ -167,7 +170,7 @@ export function executeBlock(st: MatchState, defIdx: 0 | 1, set: SetResult, atta
     return result;
   }
 
-  if (diff > -8 && st.rng.chance(0.55)) {
+  if (diff > -5 && diff <= 8 && st.rng.chance(0.40)) {
     result.touch = true;
     // soft block or funnel
     if (blockers.some((b) => hasSig(b.signatures, 'FUNNEL_BLOCK'))) {

@@ -2,13 +2,15 @@ import { useContext, useState } from 'preact/hooks';
 import { Ctx, save } from '../store';
 import { Shell } from '../components';
 import type { SavedTeam } from '../../engine/SaveEngine';
+import { t } from '../i18n/strings';
 
 export function DreamTeams() {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const [teams, setTeams] = useState(() => save.listDreamTeams());
 
   return (
-    <Shell title="Dream Teams" subtitle="Saved custom lineups" onBack={ctx.back}>
+    <Shell title={t(lang, 'dream')} subtitle={t(lang, 'savedLineups')} onBack={ctx.back}>
       <button class="btn primary" data-testid="btn-new-dream" onClick={() => ctx.nav({ name: 'builder', mode: 'dream' })}>
         Build New Dream Team
       </button>
@@ -23,7 +25,7 @@ export function DreamTeams() {
             </div>
           </div>
         ))}
-        {teams.length === 0 && <p class="muted">No saved dream teams yet.</p>}
+        {teams.length === 0 && <p class="muted">{t(lang, 'noSavedTeams')}</p>}
       </div>
     </Shell>
   );

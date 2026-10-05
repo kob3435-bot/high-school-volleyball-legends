@@ -116,9 +116,12 @@ function AnalysisCharts({ result, lang }: { result: MatchResult; lang: 'en' | 't
         { label: 'OP', v: sumSides(result, (p) => p.oppositeAttempts) },
         { label: 'Back', v: sumSides(result, (p) => p.backAttempts) },
       ];
-  const dirs = [
-    { label: 'Cross', v: 34 }, { label: 'Line', v: 28 }, { label: 'Tip', v: 18 }, { label: 'Tool', v: 12 }, { label: 'Straight', v: 22 },
-  ];
+  const adir = result.analysis.attackDirections || {};
+  const dirs = Object.keys(adir).length
+    ? Object.entries(adir).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label: label.slice(0,10), v}))
+    : [
+        { label: 'Cross', v: 0 }, { label: 'Line', v: 0 }, { label: 'Tip', v: 0 }, { label: 'Tool', v: 0 },
+      ];
   // Serve targets from team serveTargets isn't in result — approximate via receptions per player
   const serveTargets = (result.analysis.serveTargets?.length
     ? result.analysis.serveTargets.map((s) => ({ label: (getPlayer(s.id)?.name.split(' ').pop() ?? s.id).slice(0, 8), v: s.n }))

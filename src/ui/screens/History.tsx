@@ -2,12 +2,14 @@ import { useContext } from 'preact/hooks';
 import { Ctx, save } from '../store';
 import { Shell } from '../components';
 import { getPlayer } from '../../engine/db';
+import { t } from '../i18n/strings';
 
 export function History() {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const hist = save.listHistory();
   return (
-    <Shell title="Match History" onBack={ctx.back}>
+    <Shell title={t(lang, 'history')} onBack={ctx.back}>
       <div data-testid="history-list">
         {hist.length === 0 && <p class="muted">No saved matches yet.</p>}
         {hist.map((h) => (

@@ -37,12 +37,12 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   }
 
   // Serve pressure
-  let pressure = serve.quality * 42 + serve.power * 0.18;
+  let pressure = serve.quality * 46 + serve.power * 0.22;
   if (serve.type === 'float' || serve.type === 'jumpFloat') {
-    pressure += 8; // wobble
-    if (st.teams[st.serving].players[serve.serverId]?.signatures.includes('PRESSURE_FLOAT')) pressure += 10;
+    pressure += 10; // wobble
+    if (st.teams[st.serving].players[serve.serverId]?.signatures.includes('PRESSURE_FLOAT')) pressure += 12;
   }
-  if (serve.type === 'powerJump') pressure += 12;
+  if (serve.type === 'powerJump') pressure += 14;
 
   const roll = skill - pressure + st.rng.gauss(0, 12);
   drainStamina(receiver, 1.5);
@@ -50,7 +50,7 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   recvTeam.stats.receptions++;
 
   // Ace check first
-  if (st.rng.chance(serve.aceChance) && roll < 8) {
+  if (st.rng.chance(serve.aceChance * (roll < 0 ? 1.5 : roll < 15 ? 1.0 : 0.4))) {
     recvTeam.pstats[receiver.id].receptionErrors++;
     recvTeam.stats.receptionErrors++;
     const srv = st.teams[st.serving];
@@ -65,15 +65,15 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   let quality: ReceiveQuality;
   let qualityScore: number;
   let setterDistance: number;
-  if (roll >= 20) {
+  if (roll >= 28) {
     quality = 'perfect'; qualityScore = 0.95; setterDistance = 0.05;
     recvTeam.pstats[receiver.id].perfectReceptions++;
     recvTeam.stats.perfectReceptions++;
-  } else if (roll >= 2) {
+  } else if (roll >= 6) {
     quality = 'good'; qualityScore = 0.78; setterDistance = 0.2;
-  } else if (roll >= -8) {
+  } else if (roll >= -4) {
     quality = 'medium'; qualityScore = 0.55; setterDistance = 0.45;
-  } else if (roll >= -28) {
+  } else if (roll >= -17) {
     quality = 'poor'; qualityScore = 0.32; setterDistance = 0.75;
   } else {
     quality = 'error'; qualityScore = 0; setterDistance = 1;

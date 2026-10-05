@@ -25,26 +25,33 @@ export interface RuntimePlayer {
   isFrontRow: boolean;
 }
 
-export function computeOverall(attrs: Attributes, pos: Pos): number {
+export function computeOverall(attrs: Attributes, pos: Pos, tier?: import('./types').Tier): number {
   const w: Partial<Record<keyof Attributes, number>> = {};
   if (pos === 'S') {
-    Object.assign(w, { setAccuracy: 2, setSpeed: 1.5, decisionMaking: 1.5, deception: 1, serveAccuracy: 0.8, iq: 1.2, communication: 1 });
+    Object.assign(w, { setAccuracy: 2.2, setSpeed: 1.7, decisionMaking: 1.6, deception: 1.1, serveAccuracy: 0.9, servePower: 0.7, jumpServe: 0.6, iq: 1.4, communication: 1 });
   } else if (pos === 'MB') {
-    Object.assign(w, { jumpReach: 1.5, blockTiming: 1.5, blockRead: 1.2, approachSpeed: 1.3, spikePower: 1, speed: 1, jump: 1.2 });
+    Object.assign(w, { jumpReach: 1.6, blockTiming: 1.5, blockRead: 1.3, approachSpeed: 1.4, spikePower: 1.1, speed: 1.2, jump: 1.4, blockReach: 1.1 });
   } else if (pos === 'OP') {
-    Object.assign(w, { spikePower: 2, spikeAccuracy: 1.5, jumpReach: 1.3, backAttack: 1.2, clutch: 1, jump: 1 });
+    Object.assign(w, { spikePower: 2.2, spikeAccuracy: 1.6, jumpReach: 1.4, backAttack: 1.3, clutch: 1.1, jump: 1.1, servePower: 0.7 });
   } else if (pos === 'OH') {
-    Object.assign(w, { spikePower: 1.4, spikeAccuracy: 1.3, serveReceive: 1.3, dig: 1, servePower: 0.8, jump: 1, consistency: 1 });
+    Object.assign(w, { spikePower: 1.5, spikeAccuracy: 1.4, serveReceive: 1.3, dig: 1, servePower: 0.9, jump: 1.1, consistency: 1, crossShot: 0.7, lineShot: 0.7 });
   } else if (pos === 'L') {
-    Object.assign(w, { serveReceive: 2, dig: 2, reaction: 1.5, positioning: 1.5, ballControl: 1.3, agility: 1.2 });
+    Object.assign(w, { serveReceive: 2.2, dig: 2.2, reaction: 1.6, positioning: 1.5, ballControl: 1.4, agility: 1.3 });
   }
   let sum = 0, tw = 0;
   for (const k of ALL_ATTRS) {
-    const weight = w[k] ?? 0.15;
+    const weight = w[k] ?? 0.12;
     sum += attrs[k] * weight;
     tw += weight;
   }
-  return clamp(Math.round(sum / tw), 40, 99);
+  let ovr = Math.round(sum / tw);
+  // Tier bands: legends/stars clearly above role players
+  if (tier === 'legend') ovr = Math.max(ovr + 5, 91);
+  else if (tier === 'superstar') ovr = Math.max(ovr + 3, 86);
+  else if (tier === 'star') ovr = Math.max(ovr + 2, 80);
+  else if (tier === 'starter') ovr = Math.min(Math.max(ovr, 74), 86);
+  else if (tier === 'role') ovr = Math.min(ovr, 76);
+  return clamp(ovr, 40, 99);
 }
 
 export function makeRuntime(def: PlayerDef): RuntimePlayer {

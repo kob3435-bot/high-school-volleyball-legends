@@ -2,6 +2,7 @@ import { useContext } from 'preact/hooks';
 import { Ctx } from '../store';
 import { Shell } from '../components';
 import { buildSchoolTeam } from '../../engine/teamBuilder';
+import { getSchool } from '../../engine/db';
 import { t } from '../i18n/strings';
 
 export function WatchMode() {
@@ -12,6 +13,7 @@ export function WatchMode() {
     const t1 = buildSchoolTeam(b); t1.isCPU = true;
     ctx.nav({ name: 'live', team: t0, opponent: t1, mode: 'watch', seed: Date.now() >>> 0 });
   };
+  const label = (id: string) => getSchool(id)?.name ?? id;
   return (
     <Shell title={t(lang, 'watchMode')} subtitle={t(lang, 'cpuVsCpu')} onBack={ctx.back}>
       <div class="grid modes">
@@ -20,7 +22,7 @@ export function WatchMode() {
           ['fukuro', 'nekoma'], ['kamome', 'karasawa'], ['date', 'aoba'],
         ].map(([a, b]) => (
           <button key={a + b} class="mode-card" onClick={() => start(a, b)}>
-            <h3>{a} vs {b}</h3>
+            <h3>{label(a)} vs {label(b)}</h3>
             <p>Watch the rally</p>
           </button>
         ))}

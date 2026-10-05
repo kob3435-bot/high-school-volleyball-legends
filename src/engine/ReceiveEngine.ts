@@ -36,6 +36,12 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
     if (p && hasSig(p.signatures, 'CAPTAINS_STABILITY') && p.id !== receiver.id) skill += 2;
   }
 
+  // Glass-cannon tax: star piles with weak team receive bleed errors
+  const rotPlayers = recvTeam.rotation.map((id) => recvTeam.players[id]).filter(Boolean);
+  const avgRecv = rotPlayers.reduce((s, p) => s + p.attrs.serveReceive, 0) / Math.max(1, rotPlayers.length);
+  if (avgRecv < 80) skill -= (80 - avgRecv) * 0.65;
+  if (recvTeam.chemistry < 55) skill -= (55 - recvTeam.chemistry) * 0.3;
+
   // Serve pressure
   let pressure = serve.quality * 42 + serve.power * 0.18;
   if (serve.type === 'float' || serve.type === 'jumpFloat') {
@@ -88,4 +94,3 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   return { receiverId: receiver.id, quality, qualityScore, error: false, ace: false, setterDistance };
 }
 
-// fix duplicate quality key - I'll patch

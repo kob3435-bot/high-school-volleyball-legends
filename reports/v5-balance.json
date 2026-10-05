@@ -1,0 +1,14 @@
+{
+  "matches": 5000,
+  "crashes": 0,
+  "validationErrors": 0,
+  "attackPct": 0.33,
+  "acePct": 4.7,
+  "serveErrPct": 7.8,
+  "receptionPct": 94.0,
+  "blocksPerSet": 1.59,
+  "digsPerSet": 4.86,
+  "sideOutPct": 70.0,
+  "starPileWinRate": 0.73,
+  "nekomaUpsetRate": 0.19
+}

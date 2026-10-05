@@ -131,4 +131,34 @@ try {
   console.log('All-aces team OK', sim.getResult().setsWon);
 } catch (e) { console.error('extreme fail', e); }
 
+
+// Star pile (high OVR, weak receive) vs balanced receive team
+console.log('\n--- Star pile vs balanced receive ---');
+function winRate(aTeam: () => ReturnType<typeof buildSchoolTeam>, bTeam: () => ReturnType<typeof buildSchoolTeam>, n = 80) {
+  let aw = 0;
+  for (let i = 0; i < n; i++) {
+    const a = aTeam(); const b = bTeam();
+    a.isCPU = true; b.isCPU = true;
+    const sim = new MatchSim(a, b, 5000 + i, { bestOf: 3, keepEvents: false });
+    sim.simToEnd();
+    const r = sim.getResult();
+    if (r.setsWon[0] > r.setsWon[1]) aw++;
+  }
+  return aw / n;
+}
+try {
+  const stars = () => {
+    // Real stars with mediocre receive + weak libero — stars favored, cats can steal
+    const ids = ['oikawa', 'ushida', 'bokura', 'azuma', 'kyotani', 'haido'];
+    const weakLib = allPlayers().filter((p) => p.pos === 'L')
+      .sort((a, b) => a.attrs.serveReceive - b.attrs.serveReceive)[0];
+    return buildDreamTeam('StarPile', ids, weakLib?.id ?? null);
+  };
+  const balanced = () => buildSchoolTeam('nekoma');
+  const wr = winRate(stars, balanced, 100);
+  const wr2 = winRate(balanced, stars, 100);
+  console.log(`GlassStarPile vs Nekomo winRate=${wr.toFixed(2)} (stars favored ~0.65-0.85)`);
+  console.log(`Nekomo vs GlassStarPile winRate=${wr2.toFixed(2)} (balanced can steal ~0.20+)`);
+} catch (e) { console.error('starPile fail', e); }
+
 console.log('\nDone.');

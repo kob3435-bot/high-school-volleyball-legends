@@ -5,10 +5,10 @@ import { buildSchoolTeam } from '../../engine/teamBuilder';
 import { t } from '../i18n/strings';
 
 const CHALLENGES = [
-  { id: 'comeback', title: 'Comeback Kids', desc: 'Beat Shiratori with Karasawa', a: 'karasawa', b: 'shiratori' },
+  { id: 'comeback', title: 'Comeback Kids', desc: 'Beat Shiratorizawo with Karasuna', a: 'karasawa', b: 'shiratori' },
   { id: 'iron', title: 'Break the Wall', desc: 'Score 25 on Date Industrial', a: 'aoba', b: 'date' },
-  { id: 'cats', title: 'Cat Fight', desc: 'Out-rally Nekoma East', a: 'fukuro', b: 'nekoma' },
-  { id: 'twins', title: 'Twin Storm', desc: 'Win with Inari High', a: 'inari', b: 'kamome' },
+  { id: 'cats', title: 'Cat Fight', desc: 'Out-rally Nekomo High', a: 'fukuro', b: 'nekoma' },
+  { id: 'twins', title: 'Twin Storm', desc: 'Win with Inarizako High', a: 'inari', b: 'kamome' },
 ];
 
 export function Challenge() {

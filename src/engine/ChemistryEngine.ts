@@ -39,7 +39,7 @@ export function computeTeamChemistry(t: TeamRT): number {
   // Receive balance penalty for all-star piles with bad receive
   const receivers = t.rotation.map((id) => t.players[id]).filter(Boolean);
   const avgRecv = receivers.reduce((s, p) => s + p.attrs.serveReceive, 0) / Math.max(1, receivers.length);
-  if (avgRecv < 70) sum -= (70 - avgRecv) * 0.8;
+  if (avgRecv < 78) sum -= (78 - avgRecv) * 1.35;
   // Superstar ego: high overall, low communication
   const avgComm = receivers.reduce((s, p) => s + p.attrs.communication, 0) / receivers.length;
   sum += (avgComm - 70) * 0.3;

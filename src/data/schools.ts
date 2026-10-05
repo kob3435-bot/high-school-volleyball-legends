@@ -1,16 +1,16 @@
 import type { School } from '../engine/types';
 
 export const SCHOOLS: School[] = [
-  { id: 'karasawa', name: 'Karasawa High', short: 'KAR', primary: '#1a1a2e', secondary: '#e94560', accent: '#f5a623', style: 'Ultra-fast offense, momentum', logoShape: 'crest' },
-  { id: 'nekoma', name: 'Nekoma East', short: 'NEK', primary: '#8B0000', secondary: '#111', accent: '#ffcc00', style: 'Defense, rally extension', logoShape: 'circle' },
-  { id: 'aoba', name: 'Aoba Seijo', short: 'AOB', primary: '#2e8b57', secondary: '#fff', accent: '#87ceeb', style: 'Setter-controlled, serve pressure', logoShape: 'shield' },
-  { id: 'shiratori', name: 'Shiratori Academy', short: 'SHR', primary: '#4a0080', secondary: '#e0d4ff', accent: '#fff', style: 'Absolute ace, power', logoShape: 'star' },
-  { id: 'inari', name: 'Inari High', short: 'INA', primary: '#c45c26', secondary: '#1a1a1a', accent: '#ffd700', style: 'Serve pressure, creativity', logoShape: 'hex' },
-  { id: 'fukuro', name: 'Fukuro Academy', short: 'FUK', primary: '#2c3e50', secondary: '#e74c3c', accent: '#ecf0f1', style: 'Emotional ace, management', logoShape: 'diamond' },
-  { id: 'date', name: 'Date Industrial', short: 'DAT', primary: '#1e3a5f', secondary: '#f39c12', accent: '#fff', style: 'Iron wall blocking', logoShape: 'shield' },
-  { id: 'kamome', name: 'Kamome High', short: 'KAM', primary: '#0984e3', secondary: '#dfe6e9', accent: '#00cec9', style: 'Blocking, serving, composure', logoShape: 'circle' },
-  { id: 'mujina', name: 'Mujina High', short: 'MUJ', primary: '#5d4e37', secondary: '#f5f0e6', accent: '#c0392b', style: 'Heavy power offense', logoShape: 'crest' },
-  { id: 'itachi', name: 'Itachi Academy', short: 'ITA', primary: '#2d3436', secondary: '#fd79a8', accent: '#ffeaa7', style: 'Precision and receive', logoShape: 'star' },
+  { id: 'karasawa', name: 'Karasuna High', short: 'KRN', primary: '#1a1a2e', secondary: '#e94560', accent: '#f5a623', style: 'Ultra-fast offense, momentum', logoShape: 'crest' },
+  { id: 'nekoma', name: 'Nekomo High', short: 'NKM', primary: '#8B0000', secondary: '#111', accent: '#ffcc00', style: 'Defense, rally extension', logoShape: 'circle' },
+  { id: 'aoba', name: 'Aoba Johsei', short: 'AJS', primary: '#2e8b57', secondary: '#fff', accent: '#87ceeb', style: 'Setter-controlled, serve pressure', logoShape: 'shield' },
+  { id: 'shiratori', name: 'Shiratorizawo Academy', short: 'STZ', primary: '#4a0080', secondary: '#e0d4ff', accent: '#fff', style: 'Absolute ace, power', logoShape: 'star' },
+  { id: 'inari', name: 'Inarizako High', short: 'INZ', primary: '#c45c26', secondary: '#1a1a1a', accent: '#ffd700', style: 'Serve pressure, creativity', logoShape: 'hex' },
+  { id: 'fukuro', name: 'Fukurodano Academy', short: 'FKD', primary: '#2c3e50', secondary: '#e74c3c', accent: '#ecf0f1', style: 'Emotional ace, management', logoShape: 'diamond' },
+  { id: 'date', name: 'Dateko Tech', short: 'DTK', primary: '#1e3a5f', secondary: '#f39c12', accent: '#fff', style: 'Iron wall blocking', logoShape: 'shield' },
+  { id: 'kamome', name: 'Kamomedao High', short: 'KMD', primary: '#0984e3', secondary: '#dfe6e9', accent: '#00cec9', style: 'Blocking, serving, composure', logoShape: 'circle' },
+  { id: 'mujina', name: 'Mujinazako High', short: 'MJZ', primary: '#5d4e37', secondary: '#f5f0e6', accent: '#c0392b', style: 'Heavy power offense', logoShape: 'crest' },
+  { id: 'itachi', name: 'Itachiyamo Academy', short: 'ITY', primary: '#2d3436', secondary: '#fd79a8', accent: '#ffeaa7', style: 'Precision and receive', logoShape: 'star' },
   { id: 'legend', name: 'Special Legend Pool', short: 'LEG', primary: '#111', secondary: '#ffd700', accent: '#fff', style: 'All-star legends', logoShape: 'star' },
   // Extra schools for 32-team tournament
   { id: 'tsubame', name: 'Tsubame High', short: 'TSU', primary: '#6c5ce7', secondary: '#a29bfe', accent: '#fff', style: 'Balanced', logoShape: 'circle' },

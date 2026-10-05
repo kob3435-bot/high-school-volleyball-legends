@@ -1,5 +1,6 @@
 import type { TeamConfig, Tactics } from './types';
 import type { MatchResult } from './StatisticsEngine';
+import { getPlayer } from './db';
 
 const PREFIX = 'hsvl_v1_';
 
@@ -60,15 +61,45 @@ function write(key: string, val: unknown) {
   try { localStorage.setItem(PREFIX + key, JSON.stringify(val)); } catch { /* quota */ }
 }
 
+
+/** Drop unknown player ids from saved dream teams so old saves never crash. */
+function migrateDreamTeams(teams: SavedTeam[]): SavedTeam[] {
+  const out: SavedTeam[] = [];
+  for (const team of teams) {
+    if (!team?.config) continue;
+    const cfg = { ...team.config };
+    const rot = (cfg.rotation || []).filter((id) => !!getPlayer(id));
+    const bench = (cfg.bench || []).filter((id) => !!getPlayer(id));
+    let libero = cfg.libero && getPlayer(cfg.libero) ? cfg.libero : null;
+    if (!libero) {
+      const lib = [...rot, ...bench].map((id) => getPlayer(id)).find((p) => p?.pos === 'L');
+      libero = lib?.id ?? null;
+    }
+    if (rot.length < 6) continue; // unrecoverable — ignore
+    cfg.rotation = rot.slice(0, 6);
+    cfg.bench = bench;
+    cfg.libero = libero;
+    // Refresh display names from current roster
+    cfg.name = cfg.name || team.name;
+    out.push({ ...team, config: cfg });
+  }
+  return out;
+}
+
 export const save = {
   getSettings(): Settings { return { ...DEFAULT_SETTINGS, ...read('settings', {}) }; },
   saveSettings(s: Settings) { write('settings', s); },
 
-  listDreamTeams(): SavedTeam[] { return read('dreamTeams', []); },
+  listDreamTeams(): SavedTeam[] {
+    const raw = read<SavedTeam[]>('dreamTeams', []);
+    const cleaned = migrateDreamTeams(raw);
+    if (cleaned.length !== raw.length) write('dreamTeams', cleaned);
+    return cleaned;
+  },
   saveDreamTeam(t: SavedTeam) {
     const all = save.listDreamTeams().filter((x) => x.id !== t.id);
-    all.unshift(t);
-    write('dreamTeams', all.slice(0, 30));
+    all.unshift(migrateDreamTeams([t])[0] ?? t);
+    write('dreamTeams', all.filter(Boolean).slice(0, 30));
   },
   deleteDreamTeam(id: string) {
     write('dreamTeams', save.listDreamTeams().filter((x) => x.id !== id));

@@ -46,6 +46,8 @@ export interface TeamRT {
   setDist: Record<string, number>;
   serveTargets: Record<string, number>;
   chemistry: number; // 0-100 team chemistry
+  /** Serve-rotation index 0-5 (advances on side-out rotate) */
+  rotIndex: number;
 }
 
 export function buildTeam(cfg: TeamConfig, idx: 0 | 1): TeamRT {
@@ -75,6 +77,7 @@ export function buildTeam(cfg: TeamConfig, idx: 0 | 1): TeamRT {
     stats: emptyTeamStats(), pstats,
     momentum: 0, attackDist: {}, setDist: {}, serveTargets: {},
     chemistry: 55,
+    rotIndex: 0,
   };
   // Mark court players
   refreshCourtFlags(t);

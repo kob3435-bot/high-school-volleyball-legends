@@ -5,9 +5,11 @@ import { SCHOOLS } from '../../data/schools';
 import { buildSchoolTeam, randomTeam, allStarTeam } from '../../engine/teamBuilder';
 import type { TeamConfig } from '../../engine/types';
 import { getPlayer } from '../../engine/db';
+import { t } from '../i18n/strings';
 
 export function Opponent({ team, mode }: { team: TeamConfig; mode: string }) {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   const [opp, setOpp] = useState<TeamConfig>(() => {
     const o = buildSchoolTeam(mode === 'allstar' ? 'nekoma' : 'nekoma');
     o.isCPU = true;
@@ -21,11 +23,11 @@ export function Opponent({ team, mode }: { team: TeamConfig; mode: string }) {
   };
 
   return (
-    <Shell title="Select Opponent" subtitle={`Your team: ${team.name}`} onBack={ctx.back}>
+    <Shell title={t(lang, 'selectOpponent')} subtitle={`${t(lang, 'yourTeam')}: ${team.name}`} onBack={ctx.back}>
       <div class="panel">
         <div class="row gap wrap">
-          <button class="btn" data-testid="opp-random" onClick={() => { const o = randomTeam(Date.now()); o.isCPU = true; setOpp(o); }}>Random</button>
-          <button class="btn" onClick={() => { const o = allStarTeam('east'); o.isCPU = true; setOpp(o); }}>All-Stars</button>
+          <button class="btn" data-testid="opp-random" onClick={() => { const o = randomTeam(Date.now()); o.isCPU = true; setOpp(o); }}>{t(lang, 'random')}</button>
+          <button class="btn" onClick={() => { const o = allStarTeam('east'); o.isCPU = true; setOpp(o); }}>{t(lang, 'allStars')}</button>
         </div>
         <div class="grid modes" style={{ marginTop: 12 }}>
           {SCHOOLS.filter((s) => s.id !== 'legend').slice(0, 20).map((s) => (

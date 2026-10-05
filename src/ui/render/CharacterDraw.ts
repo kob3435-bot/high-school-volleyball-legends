@@ -270,24 +270,18 @@ export function drawCharacter(
     const label = `#${c.num} ${short}`;
     ctx.font = `600 ${Math.max(9, Math.min(13, bodyH * 0.085))}px sans-serif`;
     const tw2 = ctx.measureText(label).width;
-    const ly = headY - headR * 1.55;
+    // Stagger by jersey to reduce overlap
+    const ox = ((c.num % 3) - 1) * Math.max(10, bodyH * 0.12);
+    const oy = (c.num % 2) * -10;
+    const ly = headY - headR * 1.55 + oy;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(-tw2 / 2 - 4, ly - 2, tw2 + 8, 13);
+    ctx.fillRect(-tw2 / 2 - 4 + ox, ly - 2, tw2 + 8, 13);
     ctx.fillStyle = '#fff';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
-    ctx.fillText(label, 0, ly);
+    ctx.fillText(label, ox, ly);
   }
-
-  if (c.starSig && c.animT < 0.8) {
-    ctx.globalAlpha = 1 - c.animT;
-    ctx.fillStyle = '#ffd166';
-    ctx.font = `bold ${Math.max(11, bodyH * 0.11)}px sans-serif`;
-    ctx.textBaseline = 'bottom';
-    ctx.textAlign = 'center';
-    ctx.fillText(c.starSig, 0, headY - headR * 2.1);
-    ctx.globalAlpha = 1;
-  }
+  // starSig bursts handled by CourtView.drawBurst (single callout)
 
   ctx.restore();
 }

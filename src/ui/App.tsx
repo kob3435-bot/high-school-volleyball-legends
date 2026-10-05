@@ -4,6 +4,7 @@ import { Ctx, save, type Screen, type AppCtx } from './store';
 import type { Settings } from '../engine/SaveEngine';
 import { setAudio } from './sound';
 import { Home } from './screens/Home';
+import { t } from './i18n/strings';
 import { TeamBuilder } from './screens/TeamBuilder';
 import { Opponent } from './screens/Opponent';
 import { Preview } from './screens/Preview';

@@ -2,6 +2,7 @@ import { useContext } from 'preact/hooks';
 import { Ctx } from '../store';
 import { Shell } from '../components';
 import { buildSchoolTeam } from '../../engine/teamBuilder';
+import { t } from '../i18n/strings';
 
 const CHALLENGES = [
   { id: 'comeback', title: 'Comeback Kids', desc: 'Beat Shiratori with Karasawa', a: 'karasawa', b: 'shiratori' },
@@ -12,8 +13,9 @@ const CHALLENGES = [
 
 export function Challenge() {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   return (
-    <Shell title="Tactical Challenge" onBack={ctx.back}>
+    <Shell title={t(lang, 'tacticalChallenge')} onBack={ctx.back}>
       <div class="grid modes">
         {CHALLENGES.map((c) => (
           <button key={c.id} class="mode-card" data-testid={`challenge-${c.id}`} onClick={() => {

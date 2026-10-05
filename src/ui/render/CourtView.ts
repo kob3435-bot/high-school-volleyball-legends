@@ -54,6 +54,10 @@ export class CourtView {
   crowd = 0.35;
   graphics: 'low' | 'medium' | 'high' | 'ultra' = 'high';
   showLabels = true;
+  /** smart = only ball-involved; all = everyone; off = none */
+  labelMode: 'smart' | 'all' | 'off' = 'smart';
+  private involved = new Set<string>();
+  private burst: { x: number; y: number; text: string; t: number } | null = null;
   refSignal: 'none' | 'pointL' | 'pointR' | 'whistle' = 'none';
   refSignalT = 0;
   benchEnergy = 0;
@@ -146,6 +150,10 @@ export class CourtView {
   }
 
   private handleEvent(e: SimEvent) {
+    // Track ball-involved for smart labels
+    if (e.player) this.involved.add(e.player);
+    if (e.player2) this.involved.add(e.player2);
+    if (e.type === 'rallyStart' || e.type === 'serve') this.involved.clear();
     if (e.score) this.score = [e.score[0], e.score[1]];
     if (e.set) this.setNumber = e.set;
     if (e.text) this.lastEvent = e.text;
@@ -169,20 +177,26 @@ export class CourtView {
       }
     }
     if (e.type === 'signature') {
-      this.flash = { text: e.text || e.kind || 'SIGNATURE', t: 2.0, color: '#ffd166' };
+      // One manga-style burst near the player (no centre banner / no clipped edge label)
+      const short = (e.kind || 'SIGNATURE').replace(/_/g, ' ');
       if (e.player) {
         const c = this.chars.get(e.player);
         if (c) {
-          c.starSig = (e.kind || '').replace(/_/g, ' ');
+          c.starSig = null; // burst drawn separately, clamped on-screen
+          this.burst = { x: c.x, y: c.y, text: short, t: 1.2 };
+          this.involved.add(c.id);
           if (e.kind === 'FREAK_QUICK') this.setAnim(c, 'quickSpike');
           else if (e.kind === 'KINGS_TOSS' || e.kind === 'PINPOINT_QUICK') this.setAnim(c, 'jumpSet');
           else if (e.kind === 'GUARDIAN_DEITY') this.setAnim(c, 'dive');
           else if (e.kind === 'READ_BLOCK' || e.kind === 'IRON_WALL') this.setAnim(c, 'eyeTrack');
           else if (e.kind === 'SOUTHPAW_CANNON' || e.kind === 'ACE_CANNON') this.setAnim(c, 'spike');
           else if (e.kind === 'ACE_MODE') { c.expression = 1; this.setAnim(c, 'approach'); }
+          else if (e.kind === 'ULTIMATE_DECOY') this.setAnim(c, 'approach');
         }
+      } else {
+        this.burst = { x: this.ball.x, y: this.ball.y, text: short, t: 1.2 };
       }
-      this.setCam('net', 9, Math.min(5, this.ball.y), 1.22, 1.3);
+      this.setCam('net', 9, Math.min(5, this.ball.y), 1.15, 1.0);
     }
 
     this.animateFromEvent(e);
@@ -296,6 +310,7 @@ export class CourtView {
     this.playT += d;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - d * 2.2);
     if (this.flash) { this.flash.t -= d; if (this.flash.t <= 0) this.flash = null; }
+    if (this.burst) { this.burst.t -= d; if (this.burst.t <= 0) this.burst = null; }
     if (this.huddle) this.huddleT += d;
     this.crowd = Math.max(0.28, this.crowd - d * 0.04);
     this.benchEnergy = Math.max(0, this.benchEnergy - d * 0.35);
@@ -314,9 +329,11 @@ export class CourtView {
     }
     // Mobile: always ease toward ball
     if (this.mobile && !this.replay) {
-      this.cam.tfx = 9 * 0.55 + this.ball.x * 0.45;
-      this.cam.tfy = 3.2 * 0.6 + Math.min(5, this.ball.y) * 0.4;
-      this.cam.tzoom = 1.18;
+      // Keep full court width — mild ball bias, never clip far-side wings
+      this.cam.tfx = 9 * 0.75 + this.ball.x * 0.25;
+      this.cam.tfx = Math.min(11, Math.max(7, this.cam.tfx));
+      this.cam.tfy = 3.5 * 0.7 + Math.min(5, this.ball.y) * 0.3;
+      this.cam.tzoom = 1.02;
     }
 
     // Ball
@@ -386,6 +403,7 @@ export class CourtView {
     const list = [...this.chars.values()].sort((a, b) => b.y - a.y);
     for (const c of list) this.drawChar(ctx, c, cam, h);
     this.drawBall(ctx, cam);
+    this.drawBurst(ctx, cam, w, h);
 
     if (this.huddle) this.drawHuddleOverlay(ctx, w, h);
     if (this.replay) {
@@ -424,8 +442,8 @@ export class CourtView {
         const cx = w * 0.5 - (focusX - 9) * base * 0.22 * zoom;
         const sx = cx + (x - 9) * scale * (1 - midPull);
         // Floor extends into bottom; leave ~12% headroom above far action
-        const y0 = h * 0.92;
-        const ySpan = h * 0.52 * zoom;
+        const y0 = h * (this.mobile ? 0.86 : 0.90);
+        const ySpan = h * (this.mobile ? 0.58 : 0.54) * zoom;
         const sy = y0 - (y / COURT_W) * ySpan - (focusY - 3.5) * 5 - z * scale * 0.85;
         return [sx, sy, scale];
       },
@@ -651,8 +669,11 @@ export class CourtView {
 
 
   private drawReferee(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>) {
-    const [sx, sy, sc] = cam.project(9.55, -0.55, 0);
-    const h = sc * 1.65;
+    // Far-side net post — small, in depth, never occludes near action
+    const [sx, sy, sc] = cam.project(9.35, 9.15, 0);
+    const h = sc * 1.15;
+    ctx.save();
+    ctx.globalAlpha = 0.72;
     // Elevated stand (platform + rail)
     ctx.fillStyle = '#4a5568';
     ctx.fillRect(sx - h * 0.28, sy - h * 0.22, h * 0.56, h * 0.22);
@@ -711,9 +732,49 @@ export class CourtView {
       ctx.arc(sx + h * 0.02, bodyTop - h * 0.02, h * 0.025, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
   }
 
 
+
+
+  private drawBurst(ctx: CanvasRenderingContext2D, cam: ReturnType<CourtView['makeCam']>, w: number, h: number) {
+    if (!this.burst) return;
+    const c = [...this.chars.values()].find((ch) => Math.hypot(ch.x - this.burst!.x, ch.y - this.burst!.y) < 0.01)
+      || [...this.chars.values()].find((ch) => Math.hypot(ch.x - this.burst!.x, ch.y - this.burst!.y) < 1.5);
+    const bx = c ? c.x : this.burst.x;
+    const by = c ? c.y : this.burst.y;
+    const [sx, sy, sc] = cam.project(bx, by, 1.2);
+    const fade = Math.min(1, this.burst.t / 0.25) * Math.min(1, this.burst.t);
+    const text = this.burst.text.length > 16 ? this.burst.text.slice(0, 14) + '…' : this.burst.text;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.font = `bold ${Math.max(13, Math.min(22, h * 0.028))}px sans-serif`;
+    const tw = ctx.measureText(text).width;
+    let lx = sx;
+    let ly = sy - sc * 1.8;
+    // Keep fully on-screen
+    lx = Math.max(tw / 2 + 8, Math.min(w - tw / 2 - 8, lx));
+    ly = Math.max(22, Math.min(h * 0.55, ly));
+    // Manga burst panel
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 2;
+    const pad = 8;
+    ctx.beginPath();
+    ctx.moveTo(lx - tw / 2 - pad - 4, ly - 12);
+    ctx.lineTo(lx + tw / 2 + pad, ly - 14);
+    ctx.lineTo(lx + tw / 2 + pad + 6, ly + 6);
+    ctx.lineTo(lx - tw / 2 - pad, ly + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, lx, ly - 2);
+    ctx.restore();
+  }
 
   private drawCoach(ctx: CanvasRenderingContext2D, _cam: ReturnType<CourtView['makeCam']>) {
     // Coaches are drawn inside drawBenches for v3
@@ -739,6 +800,14 @@ export class CourtView {
     ctx.textAlign = 'left';
   }
 
+  private shouldShowLabel(c: Char): boolean {
+    if (this.labelMode === 'off' || !this.showLabels) return false;
+    if (this.labelMode === 'all') return true;
+    if (this.involved.has(c.id)) return true;
+    if (['spike','quickSpike','block','receive','dig','dive','set','jumpSet','serve','jumpServe','jumpFloat','celebrate'].includes(c.anim)) return true;
+    return false;
+  }
+
   private drawChar(ctx: CanvasRenderingContext2D, c: Char, cam: ReturnType<CourtView['makeCam']>, viewH: number) {
     const jump = (c.anim === 'spike' || c.anim === 'block' || c.anim === 'jumpServe' || c.anim === 'quickSpike'
       || c.anim === 'jumpSet' || c.anim === 'backAttack' || c.anim === 'jumpFloat' || c.anim === 'eyeTrack')
@@ -761,8 +830,8 @@ export class CourtView {
       num: c.num, handedness: c.handedness, isLibero: c.isLibero,
       name: c.name, anim: c.anim, animT: c.animT,
       expression: exprFromState(c.expression, c.anim),
-      facing: c.facing, starSig: c.starSig,
-      showLabel: this.showLabels && (c.y < 4.5 || bodyH > viewH * 0.22),
+      facing: c.facing, starSig: null,
+      showLabel: this.shouldShowLabel(c),
       crestColor: this.colors[c.team][1],
     };
     drawCharacter(ctx, draw, sx, sy, bodyH, bob);

@@ -12,16 +12,16 @@ export function DreamTeams() {
   return (
     <Shell title={t(lang, 'dream')} subtitle={t(lang, 'savedLineups')} onBack={ctx.back}>
       <button class="btn primary" data-testid="btn-new-dream" onClick={() => ctx.nav({ name: 'builder', mode: 'dream' })}>
-        Build New Dream Team
+        {t(lang, 'buildNewDream')}
       </button>
       <div class="grid modes" style={{ marginTop: 14 }}>
-        {teams.map((t: SavedTeam) => (
-          <div class="panel" key={t.id}>
-            <h3>{t.name}</h3>
-            <p class="muted">{new Date(t.created).toLocaleString()}</p>
+        {teams.map((dt: SavedTeam) => (
+          <div class="panel" key={dt.id}>
+            <h3>{dt.name}</h3>
+            <p class="muted">{new Date(dt.created).toLocaleString()}</p>
             <div class="row gap">
-              <button class="btn primary sm" onClick={() => ctx.nav({ name: 'opponent', team: t.config, mode: 'dream' })}>Play</button>
-              <button class="btn sm" onClick={() => { save.deleteDreamTeam(t.id); setTeams(save.listDreamTeams()); }}>Delete</button>
+              <button class="btn primary sm" onClick={() => ctx.nav({ name: 'opponent', team: dt.config, mode: 'dream' })}>{t(lang, 'playTeam')}</button>
+              <button class="btn sm" onClick={() => { save.deleteDreamTeam(dt.id); setTeams(save.listDreamTeams()); }}>{t(lang, 'delete')}</button>
             </div>
           </div>
         ))}

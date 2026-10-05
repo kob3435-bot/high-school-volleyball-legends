@@ -1,0 +1,23 @@
+{
+  "matches": 5000,
+  "crashes": 0,
+  "validationErrors": 0,
+  "elapsedMs": 21943,
+  "sideOutPct": 0.6735655369843749,
+  "attackPct": 0.30967190909440023,
+  "blocksPerTeamSet": 2.0873556330355196,
+  "digsPerTeamSet": 5.598360209195903,
+  "acePct": 0.051994296667987806,
+  "serveErrPct": 0.07576358093471829,
+  "receptionOk": 0.9366232890567056,
+  "receptionErr": 0.06337671094329445,
+  "perfectPct": 0.2138075652349808,
+  "receptionBreakdown": {
+    "perfect": 21.7,
+    "good": 47.1,
+    "medium": 19.2,
+    "poor": 6,
+    "error": 6
+  },
+  "positivePct": 68.8
+}

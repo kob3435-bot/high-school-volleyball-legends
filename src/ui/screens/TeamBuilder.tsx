@@ -95,10 +95,10 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
       {step === 'six' && (
         <div class="panel" data-testid="six-pick">
           <div class="row between">
-            <h3>Starting Six ({selected.length}/6)</h3>
+            <h3>{t(lang, 'startingSix')} ({selected.length}/6)</h3>
             <button class="btn sm" onClick={autoFill}>{t(lang, 'autoFill')}</button>
           </div>
-          <p class="muted">Selected: {selected.map((id) => getPlayer(id)?.name).filter(Boolean).join(', ') || '—'}</p>
+          <p class="muted">{t(lang, 'selected')}: {selected.map((id) => getPlayer(id)?.name).filter(Boolean).join(', ') || '—'}</p>
           <div class="grid players" style={{ marginTop: 10, maxHeight: 420, overflow: 'auto' }}>
             {pool.filter((p) => p.pos !== 'L').slice(0, 80).map((p) => (
               <PlayerCard key={p.id} p={p} selected={selected.includes(p.id)} onClick={() => toggle(p.id)} />
@@ -118,7 +118,7 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
             ))}
           </div>
           <div class="row gap" style={{ marginTop: 12 }}>
-            <button class="btn" onClick={() => setStep('six')}>Back</button>
+            <button class="btn" onClick={() => setStep('six')}>{t(lang, 'back')}</button>
             <button class="btn primary" data-testid="btn-to-tactics" disabled={!libero} onClick={() => setStep('tactics')}>{t(lang, 'nextTactics')}</button>
           </div>
         </div>
@@ -147,7 +147,7 @@ export function TeamBuilder({ mode, schoolId }: { mode: string; schoolId?: strin
             {['auto','weak','zone1','zone5','short','deep','seam'].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <div class="row gap" style={{ marginTop: 12 }}>
-            <button class="btn" onClick={() => setStep('libero')}>Back</button>
+            <button class="btn" onClick={() => setStep('libero')}>{t(lang, 'back')}</button>
             <button class="btn primary big" data-testid="btn-finish-team" onClick={finish}>{t(lang, 'confirmTeam')}</button>
           </div>
         </div>

@@ -12,6 +12,7 @@ export function rotate(t: TeamRT) {
   restoreLibero(t);
   const r = t.rotation;
   t.rotation = [r[5], r[0], r[1], r[2], r[3], r[4]];
+  t.rotIndex = (t.rotIndex + 1) % 6;
   refreshCourtFlags(t);
   applyLiberoRule(t);
 }

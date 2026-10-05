@@ -1,9 +1,12 @@
 import type { ComponentChildren } from 'preact';
 import type { PlayerDef } from '../engine/types';
+import { t, type Lang } from './i18n/strings';
+import { save } from '../engine/SaveEngine';
 
 export function Shell({ children, title, subtitle, onBack }: {
   children: ComponentChildren; title?: string; subtitle?: string; onBack?: () => void;
 }) {
+  const lang = (save.getSettings().language || 'en') as Lang;
   return (
     <div class="screen">
       <div class="row between wrap gap" style={{ marginBottom: 12 }}>
@@ -11,7 +14,7 @@ export function Shell({ children, title, subtitle, onBack }: {
           {title && <h1 class="title">{title}</h1>}
           {subtitle && <p class="subtitle">{subtitle}</p>}
         </div>
-        {onBack && <button class="btn ghost" onClick={onBack} data-testid="back">← Back</button>}
+        {onBack && <button class="btn ghost" onClick={onBack} data-testid="back">{t(lang, 'back')}</button>}
       </div>
       {children}
     </div>

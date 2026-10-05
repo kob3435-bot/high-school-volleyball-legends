@@ -101,6 +101,18 @@ const EN = {
   schoolStyle: 'Style',
   continue: 'Continue',
   vs: 'vs',
+  buildNewDream: 'Build New Dream Team',
+  playTeam: 'Play',
+  delete: 'Delete',
+  menu: 'Menu',
+  yourTeam: 'Your team',
+  watchMode: 'Watch Mode',
+  cpuVsCpu: 'CPU vs CPU',
+  tacticalChallenge: 'Tactical Challenge',
+  huddleHint: 'Change tactics or substitute, then resume.',
+  returnHome: 'Return Home',
+  selected: 'Selected',
+  allStars: 'All-Stars',
 } as const;
 
 export type StrKey = keyof typeof EN;
@@ -206,6 +218,18 @@ const TH: Record<StrKey, string> = {
   schoolStyle: 'สไตล์',
   continue: 'ต่อไป',
   vs: 'พบ',
+  buildNewDream: 'สร้างทีมในฝันใหม่',
+  playTeam: 'เล่น',
+  delete: 'ลบ',
+  menu: 'เมนู',
+  yourTeam: 'ทีมของคุณ',
+  watchMode: 'โหมดชม',
+  cpuVsCpu: 'CPU ปะทะ CPU',
+  tacticalChallenge: 'ภารกิจแทคติก',
+  huddleHint: 'ปรับแทคติกหรือเปลี่ยนตัว แล้วเล่นต่อ',
+  returnHome: 'กลับหน้าหลัก',
+  selected: 'เลือกแล้ว',
+  allStars: 'ออลสตาร์',
 };
 
 export function detectLang(): Lang {

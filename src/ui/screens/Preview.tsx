@@ -3,11 +3,13 @@ import { Ctx } from '../store';
 import { Shell } from '../components';
 import type { TeamConfig } from '../../engine/types';
 import { getPlayer } from '../../engine/db';
+import { t } from '../i18n/strings';
 
 export function Preview({ team, opponent, mode, seed }: { team: TeamConfig; opponent: TeamConfig; mode: string; seed: number }) {
   const ctx = useContext(Ctx);
+  const lang = ctx.settings.language;
   return (
-    <Shell title="Match Preview" subtitle={`${team.name} vs ${opponent.name}`} onBack={ctx.back}>
+    <Shell title={t(lang, 'matchPreview')} subtitle={`${team.name} vs ${opponent.name}`} onBack={ctx.back}>
       <div class="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {[team, opponent].map((t, i) => (
           <div class="panel" key={i} style={{ borderTop: `4px solid ${t.primary}` }}>

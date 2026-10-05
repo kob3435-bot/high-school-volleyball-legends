@@ -34,6 +34,7 @@ export interface Analysis {
   attackDistribution: Record<string, number>;
   attackDirections: Record<string, number>;
   serveTargets: { id: string; n: number }[];
+  rotationEff: { label: string; v: number }[];
 }
 
 export function buildResult(st: MatchState, mode: string): MatchResult {
@@ -134,6 +135,12 @@ function buildAnalysis(st: MatchState): Analysis {
     bestRotation: 'R1',
     attackDistribution,
     attackDirections: { ...st.scouting.attackDirections },
+    rotationEff: [0,1,2,3,4,5].map((i) => {
+      const w = st.scouting.rotationWon[0][i] + st.scouting.rotationWon[1][i];
+      const l = st.scouting.rotationLost[0][i] + st.scouting.rotationLost[1][i];
+      const tot = w + l;
+      return { label: `R${i + 1}`, v: tot ? Math.round((w / tot) * 100) : 0 };
+    }),
     serveTargets: serveTargets.slice(0, 8),
   };
 }

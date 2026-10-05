@@ -147,11 +147,34 @@ table.box th { color: var(--muted); font-weight: 600; }
 .tab { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
 .tab.on { background: var(--accent); border-color: transparent; }
 
+.live-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; flex-wrap: nowrap;
+}
+.live-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.live-controls-extra { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.live-menu-btn { display: none; }
+.live-setline { width: 100%; font-size: .8rem; }
+.live-menu-sheet {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 10px 12px; background: #0e2036; border-bottom: 1px solid var(--line);
+}
+.live-top { flex-wrap: wrap; }
+
 @media (max-width: 700px) {
   .screen { padding: 12px; }
-  .scoreboard .pts { font-size: 1.3rem; }
-  .btn { padding: 12px 14px; } /* touch friendly */
+  .scoreboard .pts { font-size: 1.15rem; min-width: 56px; padding: 2px 6px; }
+  .scoreboard .team { min-width: 36px; font-size: .85rem; }
+  .scoreboard .set-pip { width: 10px; height: 10px; }
+  .btn { padding: 8px 10px; } /* touch friendly but compact */
+  .btn.sm { padding: 6px 8px; font-size: .78rem; }
   .tactical-panel { grid-template-columns: 1fr; }
+  .live-controls-extra { display: none; }
+  .live-menu-btn { display: inline-flex; }
+  .live-setline { display: none; }
+  .live-bottom { padding: 4px 8px 6px; }
+  .commentary { font-size: .8rem; min-height: 1.1em; }
+  .live-top { padding: 4px 8px; }
 }
 
 .modal-backdrop {

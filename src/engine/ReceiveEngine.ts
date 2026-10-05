@@ -37,7 +37,7 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   }
 
   // Serve pressure
-  let pressure = serve.quality * 46 + serve.power * 0.22;
+  let pressure = serve.quality * 42 + serve.power * 0.18;
   if (serve.type === 'float' || serve.type === 'jumpFloat') {
     pressure += 10; // wobble
     if (st.teams[st.serving].players[serve.serverId]?.signatures.includes('PRESSURE_FLOAT')) pressure += 12;
@@ -65,15 +65,15 @@ export function executeReceive(st: MatchState, serve: ServeResult): ReceiveResul
   let quality: ReceiveQuality;
   let qualityScore: number;
   let setterDistance: number;
-  if (roll >= 28) {
+  if (roll >= 36) {
     quality = 'perfect'; qualityScore = 0.95; setterDistance = 0.05;
     recvTeam.pstats[receiver.id].perfectReceptions++;
     recvTeam.stats.perfectReceptions++;
-  } else if (roll >= 6) {
+  } else if (roll >= 14) {
     quality = 'good'; qualityScore = 0.78; setterDistance = 0.2;
-  } else if (roll >= -4) {
+  } else if (roll >= 0) {
     quality = 'medium'; qualityScore = 0.55; setterDistance = 0.45;
-  } else if (roll >= -17) {
+  } else if (roll >= -16) {
     quality = 'poor'; qualityScore = 0.32; setterDistance = 0.75;
   } else {
     quality = 'error'; qualityScore = 0; setterDistance = 1;

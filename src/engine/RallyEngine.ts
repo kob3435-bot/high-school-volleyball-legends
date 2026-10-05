@@ -122,6 +122,12 @@ function finish(st: MatchState, winner: 0 | 1, reason: PointReason, servingAtSta
   if (winner === receivingAtStart) st.teams[receivingAtStart].stats.sideOuts++;
   else st.teams[servingAtStart].stats.breakPoints++;
 
+  // Rotation efficiency (before side-out rotate)
+  const wi = st.teams[winner].rotIndex % 6;
+  const li = st.teams[1 - winner].rotIndex % 6;
+  st.scouting.rotationWon[winner][wi]++;
+  st.scouting.rotationLost[(1 - winner) as 0 | 1][li]++;
+
   onPoint(st, winner, reason);
   emit(st, { type: 'point', team: winner, kind: reason, score: [st.teams[0].score, st.teams[1].score] });
   emit(st, { type: 'rallyEnd', team: winner, kind: reason, text: `Point (${reason})` });

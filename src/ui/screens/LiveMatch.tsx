@@ -31,6 +31,7 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   const [huddleUI, setHuddleUI] = useState(false);
   const [rotation, setRotation] = useState<string[]>([]);
   const [bench, setBench] = useState<string[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const accum = useRef(0);
   const last = useRef(0);
   const pausedRef = useRef(false);
@@ -76,7 +77,9 @@ export function LiveMatch({ team, opponent, mode, seed }: {
           v.serving = s.st.serving;
           v.apply(evs);
           for (const e of evs) {
-            if (e.text) setCommentary(e.text);
+            // Signature callouts are drawn on-court only (avoid triplicated banners)
+            if (e.text && e.type !== 'signature') setCommentary(e.text);
+            else if (e.type === 'signature' && e.kind) setCommentary((e.kind || '').replace(/_/g, ' '));
             sfxForEvent(e.type, e.team);
             if (e.type === 'timeout') { setHuddleUI(true); setPaused(true); }
           }
@@ -165,34 +168,58 @@ export function LiveMatch({ team, opponent, mode, seed }: {
   return (
     <div class="live-wrap" data-testid="live-match">
       <div class="live-top">
-        <div class="scoreboard">
-          <div class="team" style={{ color: homeColor, fontWeight: 800 }}>{team.short}</div>
-          <div class="sets">{[0, 1, 2].map((i) => <div key={i} class={`set-pip ${sets[0] > i ? 'on' : ''}`} />)}</div>
-          <div class="pts" data-testid="score">{score[0]} – {score[1]}</div>
-          <div class="sets">{[0, 1, 2].map((i) => <div key={i} class={`set-pip ${sets[1] > i ? 'on' : ''}`} />)}</div>
-          <div class="team right" style={{ color: awayColor, fontWeight: 800 }}>{opponent.short}</div>
+        <div class="live-bar">
+          <div class="scoreboard">
+            <div class="team" style={{ color: homeColor, fontWeight: 800 }}>{team.short}</div>
+            <div class="sets">{[0, 1, 2].map((i) => <div key={i} class={`set-pip ${sets[0] > i ? 'on' : ''}`} />)}</div>
+            <div class="pts" data-testid="score">{score[0]} – {score[1]}</div>
+            <div class="sets">{[0, 1, 2].map((i) => <div key={i} class={`set-pip ${sets[1] > i ? 'on' : ''}`} />)}</div>
+            <div class="team right" style={{ color: awayColor, fontWeight: 800 }}>{opponent.short}</div>
+          </div>
+          <div class="live-controls">
+            <button class="btn sm" data-testid="btn-pause" onClick={() => setPaused((p) => !p)}>{paused ? t(lang, 'resume') : t(lang, 'pause')}</button>
+            {[1, 2, 4].map((sp) => (
+              <button key={sp} class={`btn sm ${speed === sp ? 'primary' : ''}`} data-testid={`speed-${sp}`}
+                onClick={() => setSpeed(sp as 1 | 2 | 4)}>{sp}x</button>
+            ))}
+            <div class="live-controls-extra">
+              <button class="btn sm" data-testid="btn-skip-rally" onClick={skipRally}>{t(lang, 'skipRally')}</button>
+              <button class="btn sm" data-testid="btn-skip-set" onClick={skipSet}>{t(lang, 'skipSet')}</button>
+              <button class="btn sm" data-testid="btn-tactics" onClick={() => setPanelOpen((o) => !o)}>{t(lang, 'tactics')}</button>
+              <button class="btn sm" data-testid="btn-labels" onClick={() => {
+                const v = viewRef.current; if (!v) return;
+                // cycle smart -> all -> off
+                if (v.labelMode === 'smart') { v.labelMode = 'all'; v.showLabels = true; }
+                else if (v.labelMode === 'all') { v.labelMode = 'off'; v.showLabels = false; }
+                else { v.labelMode = 'smart'; v.showLabels = true; }
+              }}>{t(lang, 'nameLabels')}</button>
+              <button class="btn sm" data-testid="btn-timeout" onClick={doTimeout}>{t(lang, 'timeout')}</button>
+              <button class="btn sm" data-testid="btn-sub" onClick={() => { setSubOpen(true); setPaused(true); }}>{t(lang, 'sub')}</button>
+            </div>
+            <button class="btn sm primary live-menu-btn" data-testid="btn-menu" onClick={() => setMenuOpen((o) => !o)}>{t(lang, 'menu')}</button>
+          </div>
         </div>
-        <div class="muted">Set {setNo} · Serve: {serving === 0 ? team.short : opponent.short}</div>
-        <div class="row gap wrap">
-          <button class="btn sm" data-testid="btn-pause" onClick={() => setPaused((p) => !p)}>{paused ? t(lang, 'resume') : t(lang, 'pause')}</button>
-          {[1, 2, 4].map((sp) => (
-            <button key={sp} class={`btn sm ${speed === sp ? 'primary' : ''}`} data-testid={`speed-${sp}`}
-              onClick={() => setSpeed(sp as 1 | 2 | 4)}>{sp}x</button>
-          ))}
-          <button class="btn sm" data-testid="btn-skip-rally" onClick={skipRally}>{t(lang, 'skipRally')}</button>
-          <button class="btn sm" data-testid="btn-skip-set" onClick={skipSet}>{t(lang, 'skipSet')}</button>
-          <button class="btn sm" data-testid="btn-tactics" onClick={() => setPanelOpen((o) => !o)}>{t(lang, 'tactics')}</button>
+        <div class="muted live-setline">Set {setNo} · Serve: {serving === 0 ? team.short : opponent.short}</div>
+      </div>
+      {menuOpen && (
+        <div class="live-menu-sheet" data-testid="live-menu">
+          <button class="btn sm" data-testid="btn-skip-rally" onClick={() => { skipRally(); setMenuOpen(false); }}>{t(lang, 'skipRally')}</button>
+          <button class="btn sm" data-testid="btn-skip-set" onClick={() => { skipSet(); setMenuOpen(false); }}>{t(lang, 'skipSet')}</button>
+          <button class="btn sm" data-testid="btn-tactics" onClick={() => { setPanelOpen(true); setMenuOpen(false); }}>{t(lang, 'tactics')}</button>
           <button class="btn sm" data-testid="btn-labels" onClick={() => {
             const v = viewRef.current; if (!v) return;
-            v.showLabels = !v.showLabels;
+            if (v.labelMode === 'smart') { v.labelMode = 'all'; v.showLabels = true; }
+            else if (v.labelMode === 'all') { v.labelMode = 'off'; v.showLabels = false; }
+            else { v.labelMode = 'smart'; v.showLabels = true; }
+            setMenuOpen(false);
           }}>{t(lang, 'nameLabels')}</button>
-          <button class="btn sm" data-testid="btn-timeout" onClick={doTimeout}>{t(lang, 'timeout')}</button>
-          <button class="btn sm" data-testid="btn-sub" onClick={() => { setSubOpen(true); setPaused(true); }}>{t(lang, 'sub')}</button>
+          <button class="btn sm" data-testid="btn-timeout" onClick={() => { doTimeout(); setMenuOpen(false); }}>{t(lang, 'timeout')}</button>
+          <button class="btn sm" data-testid="btn-sub" onClick={() => { setSubOpen(true); setPaused(true); setMenuOpen(false); }}>{t(lang, 'sub')}</button>
+          <button class="btn sm" onClick={() => setMenuOpen(false)}>{t(lang, 'cancel')}</button>
         </div>
-      </div>
+      )}
       <div class="court-stage">
         <canvas ref={canvasRef} data-testid="court-canvas" />
-        <div class="overlay-chip" style={{ top: 8, left: 8 }}>{commentary}</div>
       </div>
       <div class="live-bottom">
         <div class="commentary" data-testid="commentary">{commentary}</div>

@@ -137,10 +137,9 @@ function AnalysisCharts({ result, lang }: { result: MatchResult; lang: 'en' | 't
       - result.teamStats[0].receptionErrors - result.teamStats[1].receptionErrors) },
     { label: 'Error', v: result.teamStats[0].receptionErrors + result.teamStats[1].receptionErrors },
   ];
-  const rotation = [
-    { label: 'R1', v: 62 }, { label: 'R2', v: 58 }, { label: 'R3', v: 55 },
-    { label: 'R4', v: 60 }, { label: 'R5', v: 52 }, { label: 'R6', v: 57 },
-  ];
+  const rotation = (result.analysis.rotationEff && result.analysis.rotationEff.length)
+    ? result.analysis.rotationEff
+    : [1,2,3,4,5,6].map((i) => ({ label: `R${i}`, v: 0 }));
   const sideBreak = [
     { label: `${result.teams[0].short} SO`, v: Math.round(result.analysis.sideOutPct[0] * 100) },
     { label: `${result.teams[1].short} SO`, v: Math.round(result.analysis.sideOutPct[1] * 100) },

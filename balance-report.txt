@@ -1,24 +1,13 @@
-HIGH SCHOOL VOLLEYBALL LEGENDS — v3 Balance Report (5000 matches)
+HIGH SCHOOL VOLLEYBALL LEGENDS — v4 Balance Report (5000 matches)
 ============================================================
 Matches: 5000  Crashes: 0  Validation errors: 0
-Side-out %: 65.7%
-Attack %: 0.308
-Blocks / set (per team): 2.02
-Digs / set (per team): 5.4
-Ace %: 6.4%
-Serve error %: 7.5%
-Reception OK %: 91.1%
-Reception error %: 8.9%
-Perfect reception %: 24.2%
-
-Per-school profiles (blocks/set, digs/set, ace%, SO%, atk%):
-  date         blk=4.80 dig= 4.3 ace= 4.1% SO=61.3% atk=0.247
-  kamome       blk=4.61 dig= 4.6 ace= 5.2% SO=68.4% atk=0.310
-  karasawa     blk=2.23 dig= 6.9 ace= 6.2% SO=73.2% atk=0.428
-  mujina       blk=2.12 dig= 5.5 ace= 6.6% SO=71.4% atk=0.341
-  itachi       blk=1.64 dig= 6.6 ace= 7.0% SO=68.7% atk=0.313
-  nekoma       blk=1.60 dig= 8.0 ace= 6.2% SO=70.1% atk=0.328
-  shiratori    blk=0.96 dig= 4.8 ace= 6.1% SO=62.8% atk=0.283
-  inari        blk=0.76 dig= 4.8 ace= 8.6% SO=62.9% atk=0.284
-  aoba         blk=0.73 dig= 3.8 ace= 8.4% SO=61.7% atk=0.292
-  fukuro       blk=0.72 dig= 4.5 ace= 5.8% SO=56.6% atk=0.252
+Side-out %: 67.4%
+Attack %: 0.310
+Blocks / set (per team): 2.09
+Digs / set (per team): 5.6
+Ace %: 5.2%
+Serve error %: 7.6%
+Reception OK %: 93.7%
+Reception error %: 6.3%
+Reception breakdown: perfect 21.7% / good 47.1% / medium 19.2% / poor 6% / error 6%
+Positive (perfect+good): 68.8%
